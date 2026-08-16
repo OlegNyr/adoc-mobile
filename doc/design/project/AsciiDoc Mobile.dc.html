@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Condensed:wght@500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #0b0d0f; }
+  a { color: #94bce3; text-decoration: none; border-bottom: 1px solid #416180; }
+  a:hover { color: #b5d9fd; border-bottom-color: #749dc4; }
+  ::selection { background: #2c455d; color: #eef6ff; }
+</style>
+</helmet>
+
+<div style="padding:56px 64px 96px;background:#0b0d0f;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif;display:flex;flex-direction:column;gap:80px">
+
+  <section style="display:flex;flex-direction:column;gap:36px">
+    <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.14em;color:#749dc4;border:1px solid #2c3a47;padding:5px 9px">1a</span>
+      <h2 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:34px;letter-spacing:.03em;text-transform:uppercase">Основной поток — тёмная тема, Android</h2>
+      <span style="font-size:15px;color:#8b9299;max-width:520px;text-wrap:pretty">Семь экранов: репозиторий, редактор, превью, коммит, конфликт, клонирование, настройки. Переключатель «Редактор/Превью» и выбор стороны в конфликте — рабочие.</span>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:44px 40px">
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M3 6h18M3 12h18M3 18h18"></path></svg>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:20px;letter-spacing:.04em;flex:1">platform-docs</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.3-4.3"></path></svg>
+            </div>
+
+            <div style="flex:none;padding:16px 14px 12px">
+              <div style="position:relative;border:1px solid #2c3a47;padding:14px 14px 12px;background:#16191d">
+                <i style="position:absolute;left:-5px;top:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <i style="position:absolute;right:-5px;top:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <i style="position:absolute;left:-5px;bottom:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <i style="position:absolute;right:-5px;bottom:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#749dc4" stroke-width="1.5"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#94bce3">feature/rest-docs</span>
+                  <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">↓2 ↑1</span>
+                </div>
+                <div style="display:flex;gap:18px;margin-top:12px;font-size:13px;color:#8b9299">
+                  <span>3 изменения</span>
+                  <span>git@github.com:acme/platform-docs</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="flex:none;display:flex;gap:8px;padding:0 14px 12px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#94bce3;border:1px solid #2c455d;background:#1a2530;padding:6px 9px">ИЗМЕНЁННЫЕ</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#8b9299;border:1px solid #262c33;padding:6px 9px">ВСЕ ФАЙЛЫ</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#8b9299;border:1px solid #262c33;padding:6px 9px">НЕДАВНИЕ</span>
+            </div>
+
+            <div style="flex:1;overflow:hidden;border-top:1px solid #1f242a">
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid #1f242a">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3;width:14px">M</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:16px">vision.adoc</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d;margin-top:2px">docs/product · 4 мин назад</div>
+                </div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">+41 −6</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid #1f242a">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#7e9cb8;width:14px">A</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:16px">api-guide.adoc</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d;margin-top:2px">docs/reference · вчера</div>
+                </div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">+128</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid #1f242a">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;width:14px">?</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:16px">diagrams/flow.puml</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d;margin-top:2px">не отслеживается</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid #1f242a;opacity:.72">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M3 7h6l2 2h10v10H3z"></path></svg>
+                <div style="flex:1;font-size:16px">modules/</div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">14</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid #1f242a;opacity:.72">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M3 7h6l2 2h10v10H3z"></path></svg>
+                <div style="flex:1;font-size:16px">partials/</div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">7</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;opacity:.72">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M14 3H7v18h11V7z"></path><path d="M14 3v4h4"></path></svg>
+                <div style="flex:1;font-size:16px">antora.yml</div>
+              </div>
+            </div>
+
+            <div style="flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid #262c33;background:#17191c">
+              <button style="flex:1;height:46px;border:1px solid #2c3a47;background:transparent;color:#c6cbd0;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:.06em;border-radius:0" style-hover="background:#1c242c">PULL</button>
+              <button style="flex:1;height:46px;border:1px solid #5980a6;background:#5980a6;color:#0d1318;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:.06em;border-radius:0" style-hover="background:#749dc4">COMMIT · 3</button>
+              <button style="width:46px;height:46px;border:1px solid #2c3a47;background:transparent;color:#94bce3;font-size:20px;border-radius:0" style-hover="background:#1c242c">+</button>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">01 · РЕПОЗИТОРИЙ</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M15 5l-7 7 7 7"></path></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.04em">vision.adoc</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f767d;letter-spacing:.05em">ИЗМЕНЁН · НЕ СОХРАНЁН</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M4 12s3.5-6 8-6 8 6 8 6-3.5 6-8 6-8-6-8-6z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+            </div>
+
+            <div style="flex:none;display:flex;border-bottom:1px solid #262c33;background:#17191c">
+              <button onClick="{{ showEditor }}" style="flex:1;height:44px;background:transparent;border:none;border-bottom:2px solid {{ editorTabBorder }};color:{{ editorTabColor }};font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em">РЕДАКТОР</button>
+              <button onClick="{{ showPreview }}" style="flex:1;height:44px;background:transparent;border:none;border-bottom:2px solid {{ previewTabBorder }};color:{{ previewTabColor }};font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em">ПРЕВЬЮ</button>
+            </div>
+
+            <sc-if value="{{ isEditor }}" hint-placeholder-val="{{ true }}">
+              <div style="flex:1;overflow:hidden;display:flex;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:21px">
+                <div style="flex:none;width:40px;text-align:right;padding:12px 8px 0 0;color:#414a53;background:#15181b;border-right:1px solid #1f242a">
+                  <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div style="color:#94bce3">14</div><div>15</div><div>16</div><div>17</div><div>18</div>
+                </div>
+                <div style="flex:1;padding:12px 12px 0;color:#c6cbd0;white-space:nowrap;overflow:hidden">
+                  <div><span style="color:#94bce3;font-weight:700">= AsciiDoc-редактор для мобильных</span></div>
+                  <div><span style="color:#7e9cb8">:status:</span> черновик концепции</div>
+                  <div><span style="color:#7e9cb8">:revdate:</span> август 2026</div>
+                  <div><span style="color:#7e9cb8">:toc:</span> macro</div>
+                  <div>&nbsp;</div>
+                  <div><span style="color:#94bce3;font-weight:700">== 1. Проблема</span></div>
+                  <div>&nbsp;</div>
+                  <div>AsciiDoc — стандарт де-факто для</div>
+                  <div>технической документации</div>
+                  <div>(docs-as-code, Antora, Spring REST</div>
+                  <div>Docs, Confluence-пайплайны), однако</div>
+                  <div>мобильная экосистема для него</div>
+                  <div>практически пуста. На Android есть</div>
+                  <div>только устаревшие вьюеры<span style="background:#5980a6;color:#0d1318">&nbsp;</span></div>
+                  <div>&nbsp;</div>
+                  <div><span style="color:#5d6a75">[NOTE]</span></div>
+                  <div><span style="color:#5d6a75">====</span></div>
+                  <div>Проверить <span style="color:#9ebbd8;text-decoration:underline">https://asciidoctor.org</span></div>
+                </div>
+              </div>
+
+              <div style="flex:none;display:flex;gap:6px;padding:8px 10px;border-top:1px solid #262c33;background:#1a1d21;overflow:hidden">
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#94bce3">=</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#94bce3">==</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0;font-weight:700">*B*</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0;font-style:italic">_I_</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">`c`</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">*</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c6cbd0">link</span>
+                <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c6cbd0">img</span>
+                <span style="min-width:30px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d">›</span>
+              </div>
+              <x-import component-from-global-scope="AndroidKeyboard" from="./android-frame.jsx" dark="{{ true }}" hint-size="100%,300px"></x-import>
+            </sc-if>
+
+            <sc-if value="{{ isPreview }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;overflow:hidden;padding:20px 18px;color:#d3d7db">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:30px;line-height:1.1;letter-spacing:.01em;color:#eef2f5">AsciiDoc-редактор для мобильных платформ</div>
+                <div style="display:flex;gap:14px;margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#7e8890;letter-spacing:.05em">
+                  <span>ЧЕРНОВИК КОНЦЕПЦИИ</span><span>АВГУСТ 2026</span>
+                </div>
+                <div style="height:1px;background:#262c33;margin:18px 0"></div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:22px;letter-spacing:.03em;color:#94bce3">1. ПРОБЛЕМА</div>
+                <p style="margin:10px 0 0;font-size:16px;line-height:1.55;text-wrap:pretty">AsciiDoc — стандарт де-факто для технической документации (docs-as-code, Antora, Spring REST Docs, Confluence-пайплайны), однако мобильная экосистема для него практически пуста.</p>
+                <div style="margin-top:16px;border:1px solid #2c3a47;padding:12px 14px;background:#16191d">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#94bce3">NOTE</div>
+                  <p style="margin:6px 0 0;font-size:15px;line-height:1.5;color:#b9bfc5">На Android существуют только устаревшие вьюеры без редактирования.</p>
+                </div>
+                <div style="position:relative;margin-top:18px;border:1px solid #2c3a47;height:150px;background:repeating-linear-gradient(0deg,#16191d 0 19px,#191d22 19px 20px),repeating-linear-gradient(90deg,transparent 0 19px,#191d22 19px 20px);display:flex;align-items:center;justify-content:center">
+                  <i style="position:absolute;left:-5px;top:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                  <i style="position:absolute;right:-5px;top:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                  <i style="position:absolute;left:-5px;bottom:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                  <i style="position:absolute;right:-5px;bottom:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">KROKI · PLANTUML · СБОРКА…</span>
+                </div>
+                <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">Рисунок 1. Поток docs-as-code</div>
+              </div>
+            </sc-if>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">02 · РЕДАКТОР ↔ ПРЕВЬЮ (интерактивно)</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M15 5l-7 7 7 7"></path></svg>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.04em;flex:1">Коммит</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3">feature/rest-docs</span>
+            </div>
+            <div style="flex:none;padding:16px 14px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">ИНДЕКС · 2 ИЗ 3</div>
+            <div style="flex:none">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #1f242a">
+                <span style="width:18px;height:18px;border:1px solid #5980a6;background:#5980a6;color:#0d1318;font-size:12px;display:flex;align-items:center;justify-content:center">✓</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3;width:12px">M</span>
+                <span style="flex:1;font-size:15px">docs/product/vision.adoc</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">+41 −6</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #1f242a">
+                <span style="width:18px;height:18px;border:1px solid #5980a6;background:#5980a6;color:#0d1318;font-size:12px;display:flex;align-items:center;justify-content:center">✓</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#7e9cb8;width:12px">A</span>
+                <span style="flex:1;font-size:15px">docs/reference/api-guide.adoc</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">+128</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #1f242a;border-bottom:1px solid #1f242a;opacity:.6">
+                <span style="width:18px;height:18px;border:1px solid #3a444e"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;width:12px">?</span>
+                <span style="flex:1;font-size:15px">diagrams/flow.puml</span>
+              </div>
+            </div>
+            <div style="flex:1;padding:18px 14px;display:flex;flex-direction:column;gap:10px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">СООБЩЕНИЕ</div>
+              <div style="flex:1;border:1px solid #2c3a47;background:#16191d;padding:12px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:20px;color:#c6cbd0">docs: раздел «Проблема» и черновик<br>api-guide<span style="border-left:1px solid #94bce3;margin-left:1px"></span><div style="margin-top:14px;color:#5d6a75">— описан разрыв в мобильной<br>&nbsp;&nbsp;экосистеме AsciiDoc</div></div>
+              <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d"><span>50 / 72 симв.</span><span>подпись: gpg off</span></div>
+            </div>
+            <div style="flex:none;padding:0 14px 14px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #262c33;background:#17191c">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#749dc4" stroke-width="1.5"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+                <span style="flex:1;font-size:15px;color:#b9bfc5">Отправить в origin после коммита</span>
+                <span style="width:38px;height:22px;background:#2c455d;border:1px solid #5980a6;display:flex;align-items:center;justify-content:flex-end;padding:2px"><span style="width:16px;height:16px;background:#94bce3"></span></span>
+              </div>
+              <div style="display:flex;gap:10px">
+                <button style="flex:none;width:104px;height:48px;border:1px solid #2c3a47;background:transparent;color:#c6cbd0;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:.06em;border-radius:0" style-hover="background:#1c242c">ОТМЕНА</button>
+                <button style="flex:1;height:48px;border:1px solid #5980a6;background:#5980a6;color:#0d1318;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:17px;letter-spacing:.06em;border-radius:0" style-hover="background:#749dc4">COMMIT &amp; PUSH</button>
+              </div>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">03 · COMMIT / PUSH</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M15 5l-7 7 7 7"></path></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.04em">Конфликт слияния</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f767d">vision.adoc · участок 1 из 2</div>
+              </div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#94bce3;border:1px solid #2c455d;padding:5px 8px">1/2</span>
+            </div>
+
+            <div style="flex:1;overflow:hidden;padding:16px 14px;display:flex;flex-direction:column;gap:14px">
+              <div style="border:1px solid {{ localBorder }};background:#16191d">
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #1f242a">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#94bce3">ЛОКАЛЬНО · HEAD</span>
+                  <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f767d">вы · 4 мин назад</span>
+                </div>
+                <div style="padding:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:20px;color:#c6cbd0;white-space:pre-wrap">:status: черновик концепции
+:revdate: август 2026
+:toc: macro</div>
+              </div>
+
+              <div style="border:1px solid {{ remoteBorder }};background:#16191d">
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #1f242a">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#7e9cb8">ORIGIN/MAIN</span>
+                  <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f767d">m.orlov · 2 ч назад</span>
+                </div>
+                <div style="padding:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:20px;color:#c6cbd0;white-space:pre-wrap">:status: на ревью
+:revdate: август 2026
+:sectnums:</div>
+              </div>
+
+              <div style="margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">РЕЗУЛЬТАТ</div>
+              <div style="border:1px solid #2c3a47;background:#101317;padding:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:20px;color:#94bce3;white-space:pre-wrap">{{ resolution }}</div>
+            </div>
+
+            <div style="flex:none;display:flex;gap:8px;padding:12px 14px;border-top:1px solid #262c33;background:#17191c">
+              <button onClick="{{ pickLocal }}" style="flex:1;height:46px;border:1px solid #2c3a47;background:{{ localBtnBg }};color:#c6cbd0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;border-radius:0" style-hover="background:#1c242c">ЛОКАЛЬНОЕ</button>
+              <button onClick="{{ pickRemote }}" style="flex:1;height:46px;border:1px solid #2c3a47;background:{{ remoteBtnBg }};color:#c6cbd0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;border-radius:0" style-hover="background:#1c242c">УДАЛЁННОЕ</button>
+              <button onClick="{{ pickBoth }}" style="flex:1;height:46px;border:1px solid #2c3a47;background:{{ bothBtnBg }};color:#c6cbd0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;border-radius:0" style-hover="background:#1c242c">ОБА</button>
+              <button style="flex:none;width:78px;height:46px;border:1px solid #5980a6;background:#5980a6;color:#0d1318;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:.06em;border-radius:0" style-hover="background:#749dc4">ДАЛЕЕ</button>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">04 · КОНФЛИКТ (интерактивно)</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.04em;flex:1">Клонировать репозиторий</span>
+            </div>
+            <div style="flex:1;padding:20px 14px;display:flex;flex-direction:column;gap:20px">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <label style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">URL</label>
+                <div style="border:1px solid #5980a6;background:#16191d;padding:13px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#e6e8ea">git@github.com:acme/platform-docs.git</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <label style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">АВТОРИЗАЦИЯ</label>
+                <div style="display:flex;gap:8px">
+                  <span style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid #5980a6;background:#1a2530;font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3">SSH-КЛЮЧ</span>
+                  <span style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid #262c33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">ТОКЕН</span>
+                  <span style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid #262c33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">БЕЗ АВТ.</span>
+                </div>
+                <div style="font-size:13px;color:#6f767d">id_ed25519 · добавлен 12 июня</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <label style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">ВЕТКА</label>
+                <div style="border:1px solid #2c3a47;background:#16191d;padding:13px 12px;display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">main<span style="margin-left:auto;color:#6f767d">▾</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <label style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">ПАПКА</label>
+                <div style="border:1px solid #2c3a47;background:#16191d;padding:13px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">/storage/docs/platform-docs</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #262c33;background:#17191c">
+                <span style="flex:1;font-size:15px;color:#b9bfc5">Только последний коммит (depth 1)</span>
+                <span style="width:38px;height:22px;background:#1c2126;border:1px solid #3a444e;display:flex;align-items:center;padding:2px"><span style="width:16px;height:16px;background:#6f767d"></span></span>
+              </div>
+
+              <div style="position:relative;margin-top:auto;border:1px solid #2c3a47;background:#16191d;padding:14px">
+                <i style="position:absolute;left:-5px;top:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <i style="position:absolute;right:-5px;top:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <i style="position:absolute;left:-5px;bottom:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <i style="position:absolute;right:-5px;bottom:-6px;font-style:normal;font-size:11px;line-height:11px;color:#5980a6">+</i>
+                <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;color:#8b9299"><span>ПРИЁМ ОБЪЕКТОВ</span><span style="color:#94bce3">68%</span></div>
+                <div style="height:6px;background:#1c2126;margin-top:10px"><div style="width:68%;height:100%;background:#5980a6"></div></div>
+                <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">4 812 / 7 090 объектов · 3.1 МБ/с</div>
+              </div>
+            </div>
+            <div style="flex:none;padding:0 14px 14px">
+              <button style="width:100%;height:48px;border:1px solid #5980a6;background:#5980a6;color:#0d1318;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:17px;letter-spacing:.06em;border-radius:0" style-hover="background:#749dc4">КЛОНИРОВАТЬ</button>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">05 · КЛОНИРОВАНИЕ</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M15 5l-7 7 7 7"></path></svg>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.04em;flex:1">Настройки</span>
+            </div>
+            <div style="flex:1;overflow:hidden">
+              <div style="padding:18px 14px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">ДИАГРАММЫ</div>
+              <div style="padding:12px 14px;border-top:1px solid #1f242a;display:flex;flex-direction:column;gap:8px">
+                <span style="font-size:16px">Рендер</span>
+                <div style="display:flex;gap:8px">
+                  <span style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid #5980a6;background:#1a2530;font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3">KROKI</span>
+                  <span style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid #262c33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">ЛОКАЛЬНО</span>
+                  <span style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid #262c33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">ВЫКЛ</span>
+                </div>
+              </div>
+              <div style="padding:12px 14px;border-top:1px solid #1f242a;display:flex;flex-direction:column;gap:8px">
+                <span style="font-size:16px">Сервер Kroki</span>
+                <div style="border:1px solid #2c3a47;background:#16191d;padding:11px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">https://kroki.acme.io</div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">проверено 30 с назад · 94 мс</span>
+              </div>
+              <div style="padding:14px;border-top:1px solid #1f242a;display:flex;align-items:center;gap:12px">
+                <span style="flex:1;font-size:16px">Кешировать изображения офлайн</span>
+                <span style="width:38px;height:22px;background:#2c455d;border:1px solid #5980a6;display:flex;align-items:center;justify-content:flex-end;padding:2px"><span style="width:16px;height:16px;background:#94bce3"></span></span>
+              </div>
+
+              <div style="padding:20px 14px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">РЕДАКТОР</div>
+              <div style="padding:12px 14px;border-top:1px solid #1f242a;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:baseline"><span style="flex:1;font-size:16px">Размер шрифта</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#94bce3">13 pt</span></div>
+                <div style="height:2px;background:#262c33;position:relative"><div style="width:44%;height:100%;background:#5980a6"></div><span style="position:absolute;left:44%;top:-7px;width:16px;height:16px;background:#94bce3;transform:translateX(-50%)"></span></div>
+              </div>
+              <div style="padding:14px;border-top:1px solid #1f242a;display:flex;align-items:center;gap:12px">
+                <span style="flex:1;font-size:16px">Номера строк</span>
+                <span style="width:38px;height:22px;background:#2c455d;border:1px solid #5980a6;display:flex;align-items:center;justify-content:flex-end;padding:2px"><span style="width:16px;height:16px;background:#94bce3"></span></span>
+              </div>
+              <div style="padding:14px;border-top:1px solid #1f242a;display:flex;align-items:center;gap:12px">
+                <span style="flex:1;font-size:16px">Мягкий перенос строк</span>
+                <span style="width:38px;height:22px;background:#1c2126;border:1px solid #3a444e;display:flex;align-items:center;padding:2px"><span style="width:16px;height:16px;background:#6f767d"></span></span>
+              </div>
+
+              <div style="padding:20px 14px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">ТЕМА</div>
+              <div style="padding:12px 14px;border-top:1px solid #1f242a;display:flex;gap:8px">
+                <span style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid #5980a6;background:#1a2530;font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3">ТЁМНАЯ</span>
+                <span style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid #262c33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">СВЕТЛАЯ</span>
+                <span style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid #262c33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">СИСТЕМА</span>
+              </div>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">06 · НАСТРОЙКИ</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:36px">
+    <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.14em;color:#749dc4;border:1px solid #2c3a47;padding:5px 9px">1b</span>
+      <h2 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:34px;letter-spacing:.03em;text-transform:uppercase">Вариант: превью снизу, монохромная подсветка</h2>
+      <span style="font-size:15px;color:#8b9299;max-width:520px;text-wrap:pretty">Вместо вкладок — вытягиваемая панель превью под редактором; подсветка только на структуре, тулбар свёрнут в одну строку со свайпом. Плотнее: 12 pt / 19 px.</span>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:44px 40px">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><path d="M15 5l-7 7 7 7"></path></svg>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.04em;flex:1">vision.adoc</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">Л14 · С22</span>
+            </div>
+            <div style="flex:1;overflow:hidden;display:flex;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:19px">
+              <div style="flex:none;width:34px;text-align:right;padding:10px 6px 0 0;color:#3a434b;border-right:1px solid #1f242a">
+                <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div>
+              </div>
+              <div style="flex:1;padding:10px 12px 0;color:#a9b0b7;white-space:nowrap">
+                <div><span style="color:#e6e8ea;font-weight:700">= AsciiDoc-редактор для мобильных</span></div>
+                <div><span style="color:#7e8890">:status:</span> черновик концепции</div>
+                <div><span style="color:#7e8890">:revdate:</span> август 2026</div>
+                <div>&nbsp;</div>
+                <div><span style="color:#e6e8ea;font-weight:700">== 1. Проблема</span></div>
+                <div>&nbsp;</div>
+                <div>AsciiDoc — стандарт де-факто для</div>
+                <div>технической документации</div>
+                <div>(docs-as-code, Antora, Spring REST</div>
+                <div>Docs, Confluence-пайплайны), однако</div>
+                <div>мобильная экосистема для него</div>
+                <div>практически пуста.<span style="background:#94bce3;color:#0d1318">&nbsp;</span></div>
+                <div>&nbsp;</div>
+                <div><span style="color:#6f767d">// TODO: рынок и конкуренты</span></div>
+              </div>
+            </div>
+            <div style="flex:none;border-top:1px solid #262c33;background:#16191d">
+              <div style="display:flex;justify-content:center;padding:8px 0 4px"><span style="width:44px;height:3px;background:#3a444e"></span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:0 14px 10px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#94bce3">ПРЕВЬЮ</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f767d">обновлено 1 с назад</span>
+                <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f767d">РАЗВЕРНУТЬ ↑</span>
+              </div>
+              <div style="padding:0 14px 16px;max-height:230px;overflow:hidden">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:26px;line-height:1.1;color:#eef2f5">AsciiDoc-редактор для мобильных</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:19px;letter-spacing:.03em;color:#94bce3;margin-top:14px">1. ПРОБЛЕМА</div>
+                <p style="margin:8px 0 0;font-size:15px;line-height:1.5;color:#b9bfc5;text-wrap:pretty">AsciiDoc — стандарт де-факто для технической документации (docs-as-code, Antora, Spring REST Docs, Confluence-пайплайны), однако мобильная экосистема для него практически пуста.</p>
+              </div>
+            </div>
+            <div style="flex:none;display:flex;gap:6px;padding:8px 10px;border-top:1px solid #262c33;background:#1a1d21">
+              <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">=</span>
+              <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">*B*</span>
+              <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:13px;color:#c6cbd0">_I_</span>
+              <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c6cbd0">link</span>
+              <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c6cbd0">img</span>
+              <span style="min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #2c3a47;font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d">›</span>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">1b · РЕДАКТОР + ПАНЕЛЬ ПРЕВЬЮ</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="height:100%;display:flex;flex-direction:column;background:#131518;color:#e6e8ea;font-family:Barlow,system-ui,sans-serif">
+            <div style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #262c33;background:#17191c">
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:20px;letter-spacing:.04em;flex:1">platform-docs</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.3-4.3"></path></svg>
+            </div>
+            <div style="flex:1;overflow:hidden">
+              <div style="padding:16px 14px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">DOCS / PRODUCT</div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid #1f242a;background:#171b1f">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94bce3;width:14px">M</span>
+                <span style="flex:1;font-size:16px">vision.adoc</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">4 мин</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid #1f242a">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;width:14px">·</span>
+                <span style="flex:1;font-size:16px">roadmap.adoc</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">3 дн</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid #1f242a;border-bottom:1px solid #1f242a">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;width:14px">·</span>
+                <span style="flex:1;font-size:16px">glossary.adoc</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f767d">2 нед</span>
+              </div>
+              <div style="padding:20px 14px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#6f767d">СОСТОЯНИЕ ВЕТКИ</div>
+              <div style="margin:0 14px;border:1px solid #2c3a47;background:#16191d;padding:12px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#749dc4" stroke-width="1.5"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#94bce3;flex:1">feature/rest-docs</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b9299">↓2 ↑1</span>
+                </div>
+                <div style="margin-top:10px;font-size:14px;color:#8b9299">3 изменения · последний pull 2 ч назад</div>
+              </div>
+            </div>
+            <div style="flex:none;display:flex;border-top:1px solid #262c33;background:#17191c">
+              <div style="flex:1;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border-top:2px solid #5980a6">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94bce3" stroke-width="1.5"><path d="M3 7h6l2 2h10v10H3z"></path></svg>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94bce3">ФАЙЛЫ</span>
+              </div>
+              <div style="flex:1;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border-top:2px solid transparent">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8b9299">GIT · 3</span>
+              </div>
+              <div style="flex:1;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border-top:2px solid transparent">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9299" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path></svg>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8b9299">НАСТРОЙКИ</span>
+              </div>
+            </div>
+          </div>
+        </x-import>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f767d;letter-spacing:.06em">1b · ФАЙЛЫ С НИЖНЕЙ НАВИГАЦИЕЙ</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { tab: 'editor', pick: 'both' };
+  renderVals() {
+    const t = this.state.tab, p = this.state.pick;
+    const on = '#94bce3', off = '#7a828a';
+    const res = {
+      local: ':status: черновик концепции\n:revdate: август 2026\n:toc: macro',
+      remote: ':status: на ревью\n:revdate: август 2026\n:sectnums:',
+      both: ':status: на ревью\n:revdate: август 2026\n:toc: macro\n:sectnums:'
+    };
+    return {
+      isEditor: t === 'editor',
+      isPreview: t === 'preview',
+      showEditor: () => this.setState({ tab: 'editor' }),
+      showPreview: () => this.setState({ tab: 'preview' }),
+      editorTabBorder: t === 'editor' ? '#5980a6' : 'transparent',
+      previewTabBorder: t === 'preview' ? '#5980a6' : 'transparent',
+      editorTabColor: t === 'editor' ? on : off,
+      previewTabColor: t === 'preview' ? on : off,
+      pickLocal: () => this.setState({ pick: 'local' }),
+      pickRemote: () => this.setState({ pick: 'remote' }),
+      pickBoth: () => this.setState({ pick: 'both' }),
+      localBorder: p === 'local' || p === 'both' ? '#5980a6' : '#262c33',
+      remoteBorder: p === 'remote' || p === 'both' ? '#5980a6' : '#262c33',
+      localBtnBg: p === 'local' ? '#1a2530' : 'transparent',
+      remoteBtnBg: p === 'remote' ? '#1a2530' : 'transparent',
+      bothBtnBg: p === 'both' ? '#1a2530' : 'transparent',
+      resolution: res[p]
+    };
+  }
+}
+</script>
+</body>
+</html>
