@@ -1,0 +1,378 @@
+/* ==========================================================================
+   signature.css — фирменная тема для Asciidoctor (standalone) и Antora.
+   Подключение:
+     Asciidoctor : docinfo.html -> <link rel="stylesheet" href="theme/signature.css">
+     Antora      : supplemental-ui/css/signature.css + partials/head-styles.hbs
+   Настройка: правь переменные в :root, ниже трогать обычно не нужно.
+   Зависимостей и внешних запросов нет.
+   ========================================================================== */
+
+:root {
+  /* — палитра ————————————————————————————— */
+  --c-accent:        #2a6f97;
+  --c-accent-soft:   #e3f0f7;
+  --c-ink:           #1b2733;
+  --c-ink-soft:      #5b6b7c;
+  --c-bg:            #ffffff;
+  --c-bg-soft:       #f6f8fa;
+  --c-border:        #dde3ea;
+  --c-code-bg:       #f5f7fa;
+
+  --c-note:    #2a6f97;
+  --c-tip:     #2e8b57;
+  --c-warn:    #c07f00;
+  --c-danger:  #b3413b;
+  --c-security:#6a4c93;
+  --c-perf:    #0f766e;
+
+  /* — типографика ———————————————————————— */
+  --font-text: "Inter", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+  --fs-base: 16.5px;
+  --lh: 1.65;
+  --measure: 74ch;
+
+  /* — форма ——————————————————————————————— */
+  --radius: 10px;
+  --rail: 3px;
+  --shadow: 0 1px 2px rgba(27, 39, 51, .05), 0 8px 24px -12px rgba(27, 39, 51, .18);
+}
+
+html[data-theme="dark"] {
+  --c-accent:      #6db3d9;
+  --c-accent-soft: #14293a;
+  --c-ink:         #dfe6ee;
+  --c-ink-soft:    #9aa8b8;
+  --c-bg:          #10161d;
+  --c-bg-soft:     #161f28;
+  --c-border:      #263340;
+  --c-code-bg:     #131b23;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --c-accent:      #6db3d9;
+    --c-accent-soft: #14293a;
+    --c-ink:         #dfe6ee;
+    --c-ink-soft:    #9aa8b8;
+    --c-bg:          #10161d;
+    --c-bg-soft:     #161f28;
+    --c-border:      #263340;
+    --c-code-bg:     #131b23;
+  }
+}
+
+/* — база ——————————————————————————————————— */
+
+body,
+body.article,
+.doc {
+  font-family: var(--font-text);
+  font-size: var(--fs-base);
+  line-height: var(--lh);
+  color: var(--c-ink);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#content, .doc {
+  max-width: none;
+}
+
+#content > .sect1 > .sectionbody,
+#preamble > .sectionbody,
+.doc .sectionbody {
+  max-width: var(--measure);
+}
+
+p, li { color: var(--c-ink); }
+a { color: var(--c-accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+
+/* — заголовки с цветным рельсом ————————————— */
+
+h1, h2, h3, h4, h5, h6,
+.doc h1, .doc h2, .doc h3 {
+  font-family: var(--font-text);
+  color: var(--c-ink);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+h1, .doc h1.page { font-size: 2.15rem; margin: 0 0 .6rem; }
+
+h2, .doc h2 {
+  font-size: 1.5rem;
+  margin-top: 2.75rem;
+  padding-left: .85rem;
+  border-left: var(--rail) solid var(--c-accent);
+}
+
+h3, .doc h3 { font-size: 1.18rem; margin-top: 2rem; color: var(--c-ink); }
+h4 { font-size: 1.03rem; margin-top: 1.5rem; color: var(--c-ink-soft); }
+
+/* якорь по ховеру */
+h2 > a.anchor, h3 > a.anchor, h4 > a.anchor {
+  opacity: 0; text-decoration: none; color: var(--c-ink-soft);
+  transition: opacity .12s ease;
+}
+h2:hover > a.anchor, h3:hover > a.anchor, h4:hover > a.anchor { opacity: .55; }
+
+/* — код ————————————————————————————————————— */
+
+code, kbd, pre, .doc code, .doc pre {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+:not(pre) > code {
+  background: var(--c-code-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  padding: .08em .38em;
+  font-size: .89em;
+  color: var(--c-ink);
+}
+
+.listingblock, .literalblock { margin: 1.4rem 0; }
+
+.listingblock > .content, .literalblock > .content {
+  position: relative;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-code-bg);
+  overflow: hidden;
+}
+
+.listingblock pre, .literalblock pre {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  background: transparent;
+  font-size: .875rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+/* подпись над блоком кода */
+.listingblock > .title, .imageblock > .title, .tableblock caption, .exampleblock > .title {
+  font-family: var(--font-text);
+  font-size: .82rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: .01em;
+  text-transform: none;
+  color: var(--c-ink-soft);
+  margin-bottom: .45rem;
+}
+
+/* кнопка Copy (создаётся enhance.js) */
+.code-copy {
+  position: absolute; top: .5rem; right: .5rem;
+  font: 600 .72rem/1 var(--font-text);
+  padding: .38rem .6rem;
+  color: var(--c-ink-soft);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  cursor: pointer; opacity: 0;
+  transition: opacity .15s ease, color .15s ease;
+}
+.listingblock > .content:hover .code-copy,
+.code-copy:focus-visible { opacity: 1; }
+.code-copy:hover { color: var(--c-accent); border-color: var(--c-accent); }
+.code-copy[data-done="1"] { color: var(--c-tip); border-color: var(--c-tip); }
+
+/* callouts */
+.colist > table td:first-child { padding-right: .6rem; }
+.colist > table td:first-child b { color: var(--c-accent); }
+
+/* — адмонишены —————————————————————————————— */
+
+.admonitionblock { margin: 1.5rem 0; }
+
+.admonitionblock > table {
+  border: 1px solid var(--c-border);
+  border-left: var(--rail) solid var(--c-note);
+  border-radius: var(--radius);
+  background: var(--c-bg-soft);
+  width: 100%;
+}
+.admonitionblock td.icon { padding: .9rem 0 .9rem 1rem; width: 2.6rem; vertical-align: top; }
+.admonitionblock td.content { padding: .9rem 1.1rem; border: 0; font-size: .96rem; }
+.admonitionblock td.content > :last-child { margin-bottom: 0; }
+
+.admonitionblock.tip       > table { border-left-color: var(--c-tip); }
+.admonitionblock.warning   > table { border-left-color: var(--c-warn); }
+.admonitionblock.caution   > table { border-left-color: var(--c-warn); }
+.admonitionblock.important > table { border-left-color: var(--c-danger); }
+
+/* — кастомные адмонишены на sidebar-блоках ——— */
+/*   [.admonition.security] / .perf / .gotcha / .deprecated / .experimental   */
+
+.sidebarblock.admonition {
+  border: 1px solid var(--c-border);
+  border-left: var(--rail) solid var(--c-ink-soft);
+  border-radius: var(--radius);
+  background: var(--c-bg-soft);
+  padding: .95rem 1.1rem .95rem 1.15rem;
+  margin: 1.5rem 0;
+}
+.sidebarblock.admonition > .content > :last-child { margin-bottom: 0; }
+.sidebarblock.admonition::before {
+  display: block;
+  font: 700 .7rem/1 var(--font-text);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  margin-bottom: .55rem;
+}
+.sidebarblock.admonition.security     { border-left-color: var(--c-security); }
+.sidebarblock.admonition.security::before     { content: "Безопасность"; color: var(--c-security); }
+.sidebarblock.admonition.perf         { border-left-color: var(--c-perf); }
+.sidebarblock.admonition.perf::before         { content: "Производительность"; color: var(--c-perf); }
+.sidebarblock.admonition.gotcha       { border-left-color: var(--c-warn); }
+.sidebarblock.admonition.gotcha::before       { content: "Подводный камень"; color: var(--c-warn); }
+.sidebarblock.admonition.deprecated   { border-left-color: var(--c-danger); }
+.sidebarblock.admonition.deprecated::before   { content: "Устарело"; color: var(--c-danger); }
+.sidebarblock.admonition.experimental { border-left-color: var(--c-accent); }
+.sidebarblock.admonition.experimental::before { content: "Экспериментально"; color: var(--c-accent); }
+
+/* — таблицы ————————————————————————————————— */
+
+table.tableblock {
+  border-collapse: collapse;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: .93rem;
+}
+table.tableblock thead th {
+  background: var(--c-bg-soft);
+  color: var(--c-ink);
+  font-weight: 650;
+  text-align: left;
+  border-bottom: 2px solid var(--c-border);
+}
+table.tableblock th, table.tableblock td { padding: .6rem .8rem; border-color: var(--c-border); }
+table.tableblock tbody tr:hover { background: var(--c-accent-soft); }
+table.tableblock.compact { font-size: .85rem; }
+table.tableblock.compact th, table.tableblock.compact td { padding: .4rem .55rem; }
+
+/* — hero ————————————————————————————————————— */
+
+.openblock.hero > .content {
+  padding: 2.4rem 0 1.8rem;
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 2rem;
+}
+.hero .hero-title p {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 .7rem;
+  background: linear-gradient(95deg, var(--c-ink) 15%, var(--c-accent) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero .hero-sub p {
+  font-size: 1.12rem;
+  color: var(--c-ink-soft);
+  max-width: 62ch;
+  margin: 0 0 1.2rem;
+}
+.hero .badges p { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0; }
+.hero .badges img { height: 20px; }
+
+/* — сетка карточек ——————————————————————————— */
+
+.ulist.cards > ul, .olist.cards > ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+  gap: 1rem;
+  list-style: none;
+  margin: 1.5rem 0;
+  padding: 0;
+}
+.ulist.cards li {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  padding: 1.05rem 1.15rem;
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.ulist.cards li:hover {
+  border-color: var(--c-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.ulist.cards li > p {
+  margin: 0;
+  font-size: .92rem;
+  color: var(--c-ink-soft);
+  line-height: 1.5;
+}
+.ulist.cards li > p > a {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--c-ink);
+  text-decoration: none;
+  margin-bottom: .35rem;
+}
+.ulist.cards li:hover > p > a { color: var(--c-accent); }
+
+/* — оглавление ——————————————————————————————— */
+
+#toc.toc2 {
+  background: var(--c-bg);
+  border-right: 1px solid var(--c-border);
+  font-size: .9rem;
+}
+#toc a { color: var(--c-ink-soft); text-decoration: none; }
+#toc a:hover { color: var(--c-accent); }
+#toc li.is-active > a, #toc a.is-active {
+  color: var(--c-accent); font-weight: 600;
+  border-left: 2px solid var(--c-accent); padding-left: .5rem; margin-left: -.6rem;
+}
+#toctitle { color: var(--c-ink); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+
+/* — прогресс чтения и тумблер темы ——————————— */
+
+#read-progress {
+  position: fixed; top: 0; left: 0; height: 2px; width: 0;
+  background: var(--c-accent); z-index: 9999;
+  transition: width .08s linear;
+}
+
+#theme-toggle {
+  position: fixed; right: 1rem; bottom: 1rem; z-index: 9998;
+  width: 2.4rem; height: 2.4rem; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  font-size: 1rem; line-height: 1;
+  color: var(--c-ink-soft);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow);
+}
+#theme-toggle:hover { color: var(--c-accent); border-color: var(--c-accent); }
+
+/* — прочее ——————————————————————————————————— */
+
+.imageblock img, .content img { max-width: 100%; border-radius: 8px; }
+.quoteblock { border-left: var(--rail) solid var(--c-border); padding-left: 1.1rem; font-style: normal; }
+.quoteblock .attribution { color: var(--c-ink-soft); font-size: .88rem; }
+hr { border: 0; border-top: 1px solid var(--c-border); margin: 2.5rem 0; }
+kbd {
+  background: var(--c-bg-soft); border: 1px solid var(--c-border);
+  border-bottom-width: 2px; border-radius: 5px;
+  padding: .1em .42em; font-size: .82em;
+}
+.dlist dt { color: var(--c-ink); font-weight: 650; }
+
+@media print {
+  #theme-toggle, #read-progress, .code-copy, #toc.toc2 { display: none !important; }
+  .listingblock > .content { break-inside: avoid; }
+}

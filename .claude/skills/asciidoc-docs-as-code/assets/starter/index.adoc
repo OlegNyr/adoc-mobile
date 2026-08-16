@@ -1,0 +1,190 @@
+= Contact Center Platform
+:description: Событийная платформа обработки обращений — документация
+:keywords: kafka, spring-boot, websocket, contact-center
+:source-highlighter: highlight.js
+:icons: font
+:experimental:
+:sectanchors:
+:idprefix:
+:idseparator: -
+:docinfo: shared
+:toc: left
+:toclevels: 2
+:project-version: 2.4.0
+:java-version: 21
+:docs-repo-url: https://git.corp.local/cc/platform/-/blob/main/docs
+:sourcedir: ../../src/main/java
+:testdir: ../../src/test/java
+
+// Живой пример лендинга: показывает hero, карточки, табы, callouts,
+// кастомные адмонишены, таблицу-справочник и диаграмму.
+// Собрать: asciidoctor -a docinfo=shared index.adoc
+
+[.hero]
+--
+[.hero-title]
+Contact Center Platform
+
+[.hero-sub]
+Событийная платформа обработки обращений: четыре канала, Kafka как шина
+состояний, WebSocket до рабочего места оператора, p99 ответа ниже 200{nbsp}мс.
+
+[.badges]
+image:images/badges/java.svg[Java {java-version}]
+image:images/badges/spring.svg[Spring Boot]
+image:images/badges/build.svg[Build]
+--
+
+[.cards]
+* xref:tutorial/quickstart.adoc[Быстрый старт]
+  Поднять локальный стенд и провести первое обращение от клиента до оператора за 15 минут.
+* xref:how-to/kafka-retry.adoc[Ретраи и DLQ]
+  Что делать с событиями, которые не обработались с третьей попытки, и как их вернуть в поток.
+* xref:reference/config.adoc[Справочник конфигурации]
+  Все свойства `cc.*` — типы, значения по умолчанию, влияние на нагрузку.
+* xref:explanation/architecture.adoc[Архитектура]
+  Почему выбран event sourcing, что это дало и чем за это пришлось заплатить.
+
+== Что это такое
+
+Платформа принимает обращения из чата на сайте, мобильного приложения,
+мессенджеров и телефонии, приводит их к единой модели диалога и маршрутизирует
+на свободного оператора с учётом навыков, языка и нагрузки.
+
+[.admonition.experimental]
+****
+Канал видеозвонков доступен с версии {project-version} под флагом
+`cc.channels.video.enabled`. API может измениться в следующем минорном релизе.
+****
+
+== Подключение
+
+[tabs]
+======
+Maven::
++
+[,xml]
+----
+<dependency>
+  <groupId>ru.example.cc</groupId>
+  <artifactId>cc-client-starter</artifactId>
+  <version>{project-version}</version>
+</dependency>
+----
+
+Gradle::
++
+[,kotlin]
+----
+implementation("ru.example.cc:cc-client-starter:{project-version}")
+----
+
+curl::
++
+[,bash]
+----
+curl -sS "$CC_URL/api/v1/dialogs" \
+  -H "Authorization: Bearer $CC_TOKEN" \
+  -H "Accept: application/json"
+----
+======
+
+== Первый обработчик событий
+
+.ChatConsumer.java — приём события диалога
+[,java]
+----
+@Component
+class ChatConsumer {
+
+    @KafkaListener(topics = "dialog.event.v1", concurrency = "3")  // <1>
+    void onEvent(DialogEvent event, Acknowledgment ack) {
+        dialogs.apply(event);                                       // <2>
+        ack.acknowledge();                                          // <3>
+    }
+}
+----
+<1> Значение должно совпадать с числом партиций топика: лишние потоки простаивают,
+    недостающие — упираются в лаг.
+<2> Применение события идемпотентно по `event.id`, повторная доставка безопасна.
+<3> Подтверждение вручную: при `AckMode.MANUAL` офсет двигается только после
+    успешного применения.
+
+[.admonition.gotcha]
+****
+`@KafkaListener` с `concurrency > 1` не гарантирует порядок между партициями.
+Если логика зависит от порядка событий одного диалога, ключ сообщения обязан
+быть `dialogId` — иначе события разъедутся по партициям.
+****
+
+== Поток обработки
+
+[plantuml,dialog-flow,svg]
+----
+@startuml
+!include ../style/theme.puml
+
+actor "Клиент" as client
+participant "Chat Gateway" as gw
+queue "dialog.event.v1" as k
+participant "Dialog Core" as core
+actor "Оператор" as agent
+
+client -> gw   : WebSocket frame
+gw     -> k    : DialogEvent(MESSAGE)
+k      -> core : consume
+core   -> core : apply + persist
+core   -> gw   : DialogEvent(ROUTED)
+gw     -> agent: push
+@enduml
+----
+
+== Ключевые настройки
+
+[cols="3,1,1,4", options="header", stripes=even]
+|===
+| Свойство | Тип | Дефолт | Что делает
+
+| `cc.kafka.retry.max-attempts`
+| int
+| `3`
+| Число попыток обработки до отправки в DLQ.
+
+| `cc.kafka.retry.backoff`
+| Duration
+| `1s`
+| Пауза между попытками. Суммарная задержка не должна превышать SLA оператора.
+
+| `cc.routing.skill-match`
+| enum
+| `STRICT`
+| `STRICT` — только точное совпадение навыка, `RELAXED` — деградация до общей очереди.
+
+4+| Полный список — в xref:reference/config.adoc[справочнике конфигурации].
+|===
+
+[.admonition.perf]
+****
+`cc.routing.skill-match=STRICT` при узком наборе навыков даёт очередь на
+входе: обращение ждёт конкретного оператора вместо любого свободного.
+На проде с 40+ операторами разница в p95 времени ожидания — около 12{nbsp}с.
+****
+
+[.admonition.security]
+****
+Токен оператора живёт 15 минут и не должен попадать в логи и трассировки.
+Маскирование проверяется тестом `SecurityFilterTest#tokenIsMasked` — при
+добавлении новых логгеров тест обязателен.
+****
+
+== Куда дальше
+
+Термины:: xref:reference/glossary.adoc[Глоссарий] — диалог, обращение, сессия, навык.
+Решения:: xref:decisions/index.adoc[ADR] — почему платформа устроена именно так.
+Участие:: xref:CONTRIBUTING.adoc[CONTRIBUTING] — как поднять окружение и оформить MR.
+
+[NOTE]
+====
+Страница генерируется из git. Правки в вебе будут потеряны — присылайте MR:
+{docs-repo-url}/{docfile}
+====

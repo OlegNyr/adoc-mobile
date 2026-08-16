@@ -1,0 +1,89 @@
+' ============================================================================
+'  theme.puml — единый стиль диаграмм, палитра совпадает с signature.css
+'  Подключение первой строкой каждой диаграммы:
+'      @startuml
+'      !include ../style/theme.puml
+'  Фон прозрачный — диаграмма одинаково читается в светлой и тёмной теме.
+' ============================================================================
+
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam dpi 150
+skinparam defaultFontName "Inter, Segoe UI, Helvetica, sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultMonoFontName "JetBrains Mono, Consolas, monospace"
+skinparam ArrowColor #5B6B7C
+skinparam ArrowFontColor #5B6B7C
+skinparam ArrowFontSize 12
+
+skinparam Padding 3
+skinparam Nodesep 45
+skinparam Ranksep 55
+
+skinparam sequence {
+  ParticipantBackgroundColor  #E3F0F7
+  ParticipantBorderColor      #2A6F97
+  ParticipantFontColor        #1B2733
+  ActorBackgroundColor        #E3F0F7
+  ActorBorderColor            #2A6F97
+  LifeLineBorderColor         #AFC3D2
+  LifeLineBackgroundColor     #F6F8FA
+  BoxBackgroundColor          #F6F8FA
+  BoxBorderColor              #DDE3EA
+  GroupBackgroundColor        #F6F8FA
+  GroupBorderColor            #2A6F97
+  GroupHeaderFontColor        #2A6F97
+  DividerBackgroundColor      #F6F8FA
+  DividerBorderColor          #DDE3EA
+}
+
+skinparam component {
+  BackgroundColor #E3F0F7
+  BorderColor     #2A6F97
+  FontColor       #1B2733
+}
+
+skinparam database {
+  BackgroundColor #E8F3EE
+  BorderColor     #2E8B57
+  FontColor       #1B2733
+}
+
+skinparam queue {
+  BackgroundColor #F5EEDC
+  BorderColor     #C07F00
+  FontColor       #1B2733
+}
+
+skinparam rectangle {
+  BackgroundColor #F6F8FA
+  BorderColor     #DDE3EA
+  FontColor       #1B2733
+}
+
+skinparam note {
+  BackgroundColor #F5EEDC
+  BorderColor     #C07F00
+  FontColor       #4A3B14
+}
+
+skinparam state {
+  BackgroundColor #E3F0F7
+  BorderColor     #2A6F97
+  FontColor       #1B2733
+}
+
+skinparam class {
+  BackgroundColor #E3F0F7
+  BorderColor     #2A6F97
+  FontColor       #1B2733
+  AttributeFontColor #5B6B7C
+}
+
+' Внешние системы — нейтральный серый, чтобы визуально отделялись от своих
+skinparam rectangle<<external>> {
+  BackgroundColor #EDEFF2
+  BorderColor     #9AA8B8
+  FontColor       #5B6B7C
+}

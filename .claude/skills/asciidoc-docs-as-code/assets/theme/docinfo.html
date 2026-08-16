@@ -1,0 +1,20 @@
+<!--
+  docinfo.html — подмешивается в <head> при :docinfo: shared
+  Положить рядом с index.adoc. Пути указаны относительно каталога вывода.
+-->
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="theme/signature.css">
+<style>
+  /* Гасим мигание тёмной темы до загрузки enhance.js */
+  html:not([data-theme]) { color-scheme: light dark; }
+</style>
+<script>
+  /* Читаем сохранённую тему до первой отрисовки, чтобы не было вспышки. */
+  (function () {
+    try {
+      var m = localStorage.getItem('docs-theme');
+      if (m && m !== 'system') document.documentElement.setAttribute('data-theme', m);
+    } catch (e) {}
+  })();
+</script>
