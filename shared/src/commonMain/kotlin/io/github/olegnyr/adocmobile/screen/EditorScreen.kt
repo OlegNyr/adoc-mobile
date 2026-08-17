@@ -110,6 +110,9 @@ enum class EditorTab { Editor, Preview }
  * записывает документ немедленно (`FR-11`).
  * @param imageSource источник байтов картинок рядом с документом для превью
  * (`TC-34` фичи 003); реализация — у платформенной половины tree-доступа.
+ * @param shareDocument системная отправка документа (`FR-20`): экран объявляет
+ * намерение источником уже записанного файла, платформа показывает диалог
+ * `ACTION_SEND` — тем же разделением, что у [requestFolder].
  */
 @Composable
 fun EditorScreen(
@@ -118,6 +121,7 @@ fun EditorScreen(
     modifier: Modifier = Modifier,
     foreground: Boolean = true,
     imageSource: PreviewImageSource? = null,
+    shareDocument: (DocumentSource) -> Unit = {},
 ) {
     AdocTheme {
         Surface(
@@ -213,6 +217,7 @@ fun EditorScreen(
                         retryWriteVisible = model.writeFailure != null,
                         onUndo = model::undoRequested,
                         onRedo = model::redoRequested,
+                        onShare = { model.shareRequested(shareDocument) },
                         onOpenFolder = openFolder,
                         onRetryWrite = model::retryWriteRequested,
                     )
@@ -339,6 +344,7 @@ private fun EditorAppBar(
     retryWriteVisible: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onShare: () -> Unit,
     onOpenFolder: () -> Unit,
     onRetryWrite: () -> Unit,
 ) {
@@ -380,9 +386,11 @@ private fun EditorAppBar(
 
         DocumentMenu(
             editor = editor,
+            shareEnabled = document is EditorDocument.Open,
             retryWriteVisible = retryWriteVisible,
             onUndo = onUndo,
             onRedo = onRedo,
+            onShare = onShare,
             onOpenFolder = onOpenFolder,
             onRetryWrite = onRetryWrite,
         )
@@ -391,7 +399,8 @@ private fun EditorAppBar(
 
 /**
  * Меню документа (`FR-16`) — состав решён владельцем (`OQ-4`): «Отменить»,
- * «Повторить», «Открыть папку…», «Повторить запись» при живом отказе.
+ * «Повторить», «Поделиться» (`FR-20`, дозаявлен на приёмке шлюза),
+ * «Открыть папку…», «Повторить запись» при живом отказе.
  *
  * Макет «02» рисует только кнопку меню, содержимого у меню в хэндоффе нет —
  * панель собрана в языке дизайна: квадратные углы, поверхность `raised` с
@@ -400,16 +409,19 @@ private fun EditorAppBar(
  * компоненты Material несут скругления и цвета схемы, которые пришлось бы
  * подавлять по месту.
  *
- * Недоступные пункты ([DocumentEditor.canUndo]/[canRedo]) показываются
- * приглушённо и не реагируют на касание — не прячутся и не бросают ошибку
- * (`FR-16`); касание доступного пункта закрывает меню.
+ * Недоступные пункты ([DocumentEditor.canUndo]/[canRedo], «Поделиться» без
+ * открытого документа) показываются приглушённо и не реагируют на касание —
+ * не прячутся и не бросают ошибку (`FR-16`); касание доступного пункта
+ * закрывает меню.
  */
 @Composable
 private fun DocumentMenu(
     editor: DocumentEditor,
+    shareEnabled: Boolean,
     retryWriteVisible: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onShare: () -> Unit,
     onOpenFolder: () -> Unit,
     onRetryWrite: () -> Unit,
 ) {
@@ -443,6 +455,10 @@ private fun DocumentMenu(
                     }
                     MenuItem("ПОВТОРИТЬ", enabled = editor.canRedo) {
                         onRedo()
+                        dismiss()
+                    }
+                    MenuItem("ПОДЕЛИТЬСЯ", enabled = shareEnabled) {
+                        onShare()
                         dismiss()
                     }
                     MenuItem("ОТКРЫТЬ ПАПКУ…") {

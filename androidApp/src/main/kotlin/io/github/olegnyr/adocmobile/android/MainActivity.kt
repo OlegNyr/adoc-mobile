@@ -1,6 +1,9 @@
 package io.github.olegnyr.adocmobile.android
 
+import android.content.ClipData
+import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -156,5 +159,25 @@ private fun EditorScreenHost() {
         // Картинки рядом с документом в превью (TC-34 фичи 003): байты достаёт
         // та же платформенная половина tree-доступа, что читает документы.
         imageSource = remember(access) { access.imageSource() },
+        // «Поделиться» (FR-20 фичи 005): системная отправка исходного файла.
+        // Экран уже дождался записи несохранённых правок — здесь остаётся
+        // ровно intent. SAF-URI документа отдаётся напрямую в EXTRA_STREAM,
+        // без своего FileProvider: право на дерево удерживается приложением,
+        // а получателю чтение выдаёт флаг. ClipData дублирует EXTRA_STREAM
+        // намеренно: флаг чтения система переносит получателю по ClipData, а
+        // миграция migrateExtraStreamToClipData — деталь реализации платформы,
+        // не контракт.
+        shareDocument = { source ->
+            val uri = Uri.parse(source.id)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri(source.displayName, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            // Заголовок диалога null: системный выбор получателя подписывает
+            // себя сам, а строка «Поделиться» уже была пунктом меню.
+            context.startActivity(Intent.createChooser(send, null))
+        },
     )
 }

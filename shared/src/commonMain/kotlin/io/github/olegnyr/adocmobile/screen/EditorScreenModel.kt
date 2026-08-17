@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -277,6 +278,45 @@ class EditorScreenModel(
     /** «Повторить» — симметрично [undoRequested]. */
     fun redoRequested() {
         editor.redo()
+    }
+
+    /** Ожидание записи перед отправкой; ссылка нужна, чтобы повторный запрос не удвоил отправку. */
+    private var shareJob: Job? = null
+
+    /**
+     * «Поделиться» из меню документа (`FR-20`): сначала немедленная запись
+     * несохранённых правок — тем же механизмом, что уход в фон
+     * ([AutosaveRunner.movedToBackground]), — затем сигнал отправки [send]
+     * с источником документа.
+     *
+     * Отправляется файл с диска, совпадающий с полем, поэтому сигнал ждёт,
+     * пока расхождение с диском не закроется записью. Отказ записи отменяет
+     * отправку: устаревший файл не уходит, а отказ виден плашкой
+     * [writeFailure] — как у любой записи. По той же причине запрос при уже
+     * приостановленном автосохранении (`FR-19` фичи 004) молчит: плашка на
+     * экране, и снять паузу обязана явная правка или «Повторить запись».
+     *
+     * Без открытого документа — тихий no-op: пункт меню в этом состоянии
+     * недоступен, а сигнал без файла не имеет смысла.
+     *
+     * @param send сигнал платформе: показать системный диалог отправки файла;
+     * исполнение — `ACTION_SEND` — остаётся за платформенной половиной
+     */
+    fun shareRequested(send: (DocumentSource) -> Unit) {
+        val open = document as? EditorDocument.Open ?: return
+        val docScope = documentScope ?: return
+        shareJob?.cancel()
+        // Корутина — дочерняя к области документа: смена документа отменяет
+        // и повисшую отправку — файл прежнего документа не уходит из-под
+        // нового (тот же мотив, что у TC-5).
+        shareJob = docScope.launch {
+            open.runner.movedToBackground()
+            // Запись не блокирует ввод: правка во время записи оставляет
+            // расхождение, и хвост доедет следующей записью — сигнал ждёт
+            // состояние, где диск совпал с полем либо запись отказала.
+            val settled = open.runner.documents.first { !it.isModified || it.lastSaveFailed }
+            if (!settled.isModified) send(settled.source)
+        }
     }
 
     /** Приложение на переднем плане — для записи при уходе в фон. */

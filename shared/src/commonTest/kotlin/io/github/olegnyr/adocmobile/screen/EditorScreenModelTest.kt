@@ -497,6 +497,80 @@ class EditorScreenModelTest {
         assertEquals(0, access.written.size, "текст совпал с диском — записи нет")
     }
 
+    @Test
+    fun TC_20_shareWritesUnsavedEditThenSignalsSend() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+
+        model.typeText("исходный правленый")
+        assertEquals(0, access.written.size, "до паузы записи нет — правка ещё не на диске")
+
+        val shared = mutableListOf<DocumentSource>()
+        var writtenAtSend = -1
+        model.shareRequested { source ->
+            shared += source
+            writtenAtSend = access.written.size
+        }
+
+        assertEquals(
+            listOf(held.id to "исходный правленый"),
+            access.written,
+            "перед отправкой — немедленная запись несохранённой правки (FR-20)",
+        )
+        assertEquals(listOf(held), shared, "сигнал отправки несёт источник открытого документа")
+        assertEquals(1, writtenAtSend, "запись предшествует сигналу отправки (TC-20)")
+    }
+
+    @Test
+    fun TC_20_shareWithoutDivergenceSendsWithoutWrite() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+
+        val shared = mutableListOf<DocumentSource>()
+        model.shareRequested { shared += it }
+
+        assertEquals(0, access.written.size, "без расхождения с диском записи нет (FR-20)")
+        assertEquals(listOf(held), shared, "файл на диске уже совпадает с полем — отправка уходит сразу")
+    }
+
+    @Test
+    fun TC_20_shareWithoutOpenDocumentIsSilentNoOp() {
+        val model = model()
+        model.start()
+        assertIs<EditorDocument.NoFolder>(model.document)
+
+        var sent = false
+        model.shareRequested { sent = true }
+
+        assertFalse(sent, "без открытого документа отправлять нечего (FR-20)")
+        assertEquals(0, access.written.size, "no-op не рождает записи")
+    }
+
+    @Test
+    fun TC_20_shareAfterFailedWriteDoesNotSendStaleFile() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        access.writeError = DocumentWriteError.PermissionLost
+        val model = model()
+        model.start()
+
+        model.typeText("исходный правленый")
+        var sent = false
+        model.shareRequested { sent = true }
+
+        assertEquals(1, access.written.size, "попытка записи перед отправкой была")
+        assertFalse(sent, "отказ записи отменяет отправку: устаревший файл не отправляется (FR-20)")
+        assertEquals(
+            DocumentWriteError.PermissionLost.userMessage("заметка.adoc"),
+            model.writeFailure,
+            "отказ виден пользователю плашкой (OQ-3), а не молчанием",
+        )
+    }
+
     /** Правка как в продукте: сначала поле, затем событие модели (подписка `snapshotFlow`). */
     private fun EditorScreenModel.typeText(text: String) {
         editor.textFieldState.edit { replace(0, length, text) }
