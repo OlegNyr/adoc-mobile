@@ -17,34 +17,9 @@ class AdocBlockScannerTest {
 
     // region вспомогательное
 
-    /**
-     * Документ, помнящий, где начинается каждая строка.
-     *
-     * Диапазоны сканера считаются в смещениях по всему исходнику, а тест-кейсы
-     * сформулированы в строках. Пересчёт вынесен сюда, чтобы ожидаемые значения
-     * в тестах читались как «строка 2 целиком», а не как «символы 17..28» —
-     * иначе правка одного символа в документе теста ломает все ожидания разом.
-     */
-    private class Source(vararg lines: String) {
-        private val lines: List<String> = lines.toList()
-        val text: String = this.lines.joinToString("\n")
-
-        private val starts: List<Int> = buildList {
-            var offset = 0
-            for (line in this@Source.lines) {
-                add(offset)
-                offset += line.length + 1
-            }
-        }
-
-        /** Диапазон всей строки, без перевода строки. */
-        fun line(index: Int): AdocRange = AdocRange(starts[index], starts[index] + lines[index].length)
-
-        /** Диапазон внутри строки — для конструкций уже строки, вроде callout. */
-        fun inLine(index: Int, from: Int, to: Int): AdocRange = AdocRange(starts[index] + from, starts[index] + to)
-
-        fun scan(): AdocScan = AdocBlockScanner.scan(text)
-    }
+    // Документ, помнящий смещения строк, вынесен в HighlightSource: тем же
+    // помощником пользуются тесты строчных конструкций из `SL-2`.
+    private fun Source(vararg lines: String) = HighlightSource(*lines)
 
     private fun listing(length: Int) = AdocBlockFrame(AdocBlockKind.Listing, length)
     private fun example(length: Int) = AdocBlockFrame(AdocBlockKind.Example, length)
@@ -276,11 +251,18 @@ class AdocBlockScannerTest {
             scan.blockStates,
         )
 
-        // Разметка тематического разрыва — это `FR-15`, слайс `SL-2`.
-        // Здесь проверяется ровно то, что автомат `SL-1` за него не цепляется.
+        // Проверка написана в `SL-1` как «блочный автомат за эти строки не
+        // цепляется» и уточнена в `SL-2`, когда разметку разрывов завёл `FR-15`:
+        // `---` теперь получает роль тематического разрыва, но по-прежнему не
+        // ограничителя, а `-` не получает ничего.
         assertTrue(
-            scan.spans.none { it.range == src.line(0) || it.range == src.line(6) },
-            "строки `-` и `---` блочный автомат размечать не должен",
+            scan.spans.none { it.range == src.line(0) },
+            "одиночный дефис не размечается ничем",
+        )
+        assertEquals(
+            listOf(AdocSpan(src.line(6), AdocStyle.ThematicBreak)),
+            scan.spans.filter { it.range == src.line(6) },
+            "три дефиса — тематический разрыв, а не ограничитель блока",
         )
     }
 

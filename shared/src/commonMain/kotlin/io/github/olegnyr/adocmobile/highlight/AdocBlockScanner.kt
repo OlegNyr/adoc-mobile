@@ -1,7 +1,7 @@
 package io.github.olegnyr.adocmobile.highlight
 
 /**
- * Блочный автомат подсветки — слайс `SL-1` фичи 001-syntax-highlighting.
+ * Блочный автомат подсветки — слайсы `SL-1` и `SL-2` фичи 001-syntax-highlighting.
  *
  * Автомат построчный и держит *стек* кадров «тип, длина ограничителя» (`FR-1`),
  * а не флаг «внутри блока». Флага не хватает по двум независимым причинам:
@@ -9,9 +9,14 @@ package io.github.olegnyr.adocmobile.highlight
  * ограничителя, и ограничитель внутри составного блока открывает вложенный блок,
  * а не закрывает внешний (`FR-6`).
  *
- * Чего здесь нет и не должно появиться: строчных конструкций, инлайн-разбора и
- * макросов — это слайсы `SL-2`…`SL-4`. Обычная строка вне блока не получает ни
- * одного диапазона намеренно, а не потому, что до неё не дошли руки.
+ * `SL-2` добавил к этому три вещи: строчный проход [AdocLineScanner] для строк,
+ * не являющихся ограничителями (`FR-7`…`FR-16`), состояние «начало блока», от
+ * которого зависит, распознаётся ли строчная конструкция вообще, и маскарад
+ * блока (`FR-5`) — метку стиля над ограничителем, меняющую тип блока.
+ *
+ * Чего здесь нет и не должно появиться: инлайн-разбора и макросов — это слайсы
+ * `SL-3` и `SL-4`. Обычная строка не получает ни одного диапазона намеренно, а
+ * не потому, что до неё не дошли руки.
  *
  * Спорные места сняты прогоном эталонного Asciidoctor 2.0.26 от 2026-08-17, как
  * требуют границы работ фичи, — документация языка их не описывает:
@@ -21,7 +26,9 @@ package io.github.olegnyr.adocmobile.highlight
  * * шкала длин дефисов немонотонна: 2 — open, 3 — тематический разрыв (не блок),
  *   4 и больше — listing;
  * * callout распознаётся только в конце строки;
- * * ограничитель с ведущими пробелами ограничителем не является.
+ * * ограничитель с ведущими пробелами ограничителем не является;
+ * * маскарад несимметричен: `[listing]` над `....` работает, `[quote]` над `----`
+ *   нет — блок остаётся listing.
  */
 object AdocBlockScanner {
 
@@ -34,6 +41,12 @@ object AdocBlockScanner {
         val blockStates = mutableListOf<List<AdocBlockFrame>>()
         val stack = mutableListOf<AdocBlockFrame>()
 
+        // Начало документа — начало блока: первая же строка может быть заголовком.
+        var previousRole = AdocLineRole.Boundary
+        var insideList = false
+        var pendingStyle: String? = null
+        var attributeContinues = false
+
         forEachLine(source) { lineStart, lineEnd ->
             val line = source.substring(lineStart, lineEnd)
             val delimiter = parseDelimiter(line)
@@ -44,9 +57,10 @@ object AdocBlockScanner {
                 // совпадение с открывающим ограничителем; всё остальное —
                 // содержимое, включая ограничители других длин и типов.
                 open != null && !open.kind.allowsNestedBlocks ->
-                    if (delimiter == open) {
+                    if (delimiter != null && delimiter.closes(open)) {
                         spans += AdocSpan(AdocRange(lineStart, lineEnd), AdocStyle.BlockDelimiter)
                         stack.removeAt(stack.lastIndex)
+                        previousRole = AdocLineRole.Boundary
                     } else {
                         markOpaqueContent(open.kind, line, lineStart, lineEnd, spans)
                     }
@@ -55,7 +69,50 @@ object AdocBlockScanner {
                 // текущий блок, либо открывает новый — вложенный.
                 delimiter != null -> {
                     spans += AdocSpan(AdocRange(lineStart, lineEnd), AdocStyle.BlockDelimiter)
-                    if (delimiter == open) stack.removeAt(stack.lastIndex) else stack += delimiter
+                    if (open != null && delimiter.closes(open)) {
+                        stack.removeAt(stack.lastIndex)
+                    } else {
+                        stack += masquerade(delimiter, pendingStyle)
+                    }
+                    pendingStyle = null
+                    attributeContinues = false
+                    previousRole = AdocLineRole.Boundary
+                    insideList = false
+                }
+
+                else -> {
+                    val result = AdocLineScanner.scan(
+                        line = line,
+                        offset = lineStart,
+                        context = AdocLineContext(
+                            atBlockStart = previousRole == AdocLineRole.Boundary ||
+                                previousRole == AdocLineRole.Metadata,
+                            insideList = insideList,
+                            afterLiteral = previousRole == AdocLineRole.Literal,
+                            atTopLevel = stack.isEmpty(),
+                            continuesAttribute = attributeContinues,
+                        ),
+                        spans = spans,
+                    )
+                    attributeContinues = result.attributeContinues
+                    pendingStyle = when (result.role) {
+                        // Метаданные укладываются построчно в любом порядке, и
+                        // метка стиля обязана дожить через `.Title` и `[[id]]`.
+                        AdocLineRole.Metadata -> result.blockStyle ?: pendingStyle
+                        AdocLineRole.Transparent -> pendingStyle
+                        else -> null
+                    }
+                    // Пункт списка не закрывается строкой продолжения: прогон
+                    // эталона показал, что после «ленивой» строки внутри пункта
+                    // следующий маркер по-прежнему открывает пункт.
+                    insideList = when (result.role) {
+                        AdocLineRole.ListItem -> true
+                        AdocLineRole.Text, AdocLineRole.Transparent -> insideList
+                        else -> false
+                    }
+                    // Комментарий и директива препроцессора снимаются до разбора
+                    // структуры: абзац склеивается через них, состояние не меняется.
+                    if (result.role != AdocLineRole.Transparent) previousRole = result.role
                 }
             }
 
@@ -63,6 +120,31 @@ object AdocBlockScanner {
         }
 
         return AdocScan(spans = spans, blockStates = blockStates)
+    }
+
+    /**
+     * Закрывает ли строка-ограничитель открытый кадр.
+     *
+     * Сравниваются знаки и длина, а не эффективный тип: после маскарада (`FR-5`)
+     * блок с типом `listing` может быть открыт четырьмя точками, и закрыть его
+     * обязаны те же четыре точки.
+     */
+    private fun AdocBlockFrame.closes(open: AdocBlockFrame): Boolean =
+        delimiterKind == open.delimiterKind && delimiterLength == open.delimiterLength
+
+    /**
+     * Маскарад блока `FR-5`: метка стиля над ограничителем меняет тип блока.
+     *
+     * Таблица закрыта и целиком получена прогоном эталона 2026-08-17, потому что
+     * правило несимметрично и «любая метка меняет тип» неверно. Open-блок
+     * принимает любую метку — он единственный без собственной модели содержимого.
+     * Дословные ограничители меняются только друг на друга: `[listing]` над `....`
+     * даёт listing, а `[quote]` над `----` не даёт ничего — блок остаётся listing.
+     * Метка вне таблицы тип не меняет, как требует `FR-28`.
+     */
+    private fun masquerade(delimiter: AdocBlockFrame, style: String?): AdocBlockFrame {
+        val masked = MASQUERADE[delimiter.kind to (style ?: return delimiter).lowercase()]
+        return if (masked == null || masked == delimiter.kind) delimiter else delimiter.copy(kind = masked)
     }
 
     /**
@@ -217,6 +299,32 @@ object AdocBlockScanner {
             AdocBlockKind.Passthrough, AdocBlockKind.Table,
             -> false
         }
+
+    /**
+     * Пары «тип ограничителя, метка стиля» → эффективный тип блока.
+     *
+     * Ключи в нижнем регистре: метки admonition пишутся прописными, остальные
+     * строчными, а различать их здесь незачем.
+     */
+    private val MASQUERADE: Map<Pair<AdocBlockKind, String>, AdocBlockKind> = buildMap {
+        val open = AdocBlockKind.Open
+        put(open to "listing", AdocBlockKind.Listing)
+        put(open to "source", AdocBlockKind.Listing)
+        put(open to "literal", AdocBlockKind.Literal)
+        put(open to "comment", AdocBlockKind.Comment)
+        put(open to "pass", AdocBlockKind.Passthrough)
+        put(open to "quote", AdocBlockKind.Quote)
+        put(open to "sidebar", AdocBlockKind.Sidebar)
+        put(open to "example", AdocBlockKind.Example)
+        // Admonition — стиль поверх example, а не отдельный контейнер: содержимое
+        // разбирается так же, поэтому для сканера это тот же составной блок.
+        for (label in listOf("note", "tip", "important", "caution", "warning")) {
+            put(open to label, AdocBlockKind.Example)
+        }
+        put(AdocBlockKind.Literal to "listing", AdocBlockKind.Listing)
+        put(AdocBlockKind.Literal to "source", AdocBlockKind.Listing)
+        put(AdocBlockKind.Listing to "literal", AdocBlockKind.Literal)
+    }
 
     private const val INCLUDE_DIRECTIVE = "include::"
     private const val TABLE_PREFIX = '|'
