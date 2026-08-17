@@ -22,6 +22,8 @@ data class AdocColors(
     val sunken: Color,
     /** Тулбар над клавиатурой. */
     val toolbar: Color,
+    /** Нажатое состояние кнопки тулбара и панели вставки («Состояния» дизайна). */
+    val pressed: Color,
     /** Разделители хром-панелей, неактивные сегменты. */
     val borderChrome: Color,
     /** Рамки карточек, полей, вторичных кнопок. */
@@ -65,6 +67,7 @@ val darkColors: AdocColors = AdocColors(
     raised = Color(0xFF16191D),
     sunken = Color(0xFF101317),
     toolbar = Color(0xFF1A1D21),
+    pressed = Color(0xFF1C242C),
     borderChrome = Color(0xFF262C33),
     borderObject = Color(0xFF2C3A47),
     borderList = Color(0xFF1F242A),

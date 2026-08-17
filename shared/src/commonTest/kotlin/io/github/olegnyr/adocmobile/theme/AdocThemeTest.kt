@@ -32,6 +32,7 @@ class AdocThemeTest {
         "raised" to raised,
         "sunken" to sunken,
         "toolbar" to toolbar,
+        "pressed" to pressed,
         "borderChrome" to borderChrome,
         "borderObject" to borderObject,
         "borderList" to borderList,
@@ -62,6 +63,7 @@ class AdocThemeTest {
         "raised" to Color(0xFF16191D),
         "sunken" to Color(0xFF101317),
         "toolbar" to Color(0xFF1A1D21),
+        "pressed" to Color(0xFF1C242C),
         "borderChrome" to Color(0xFF262C33),
         "borderObject" to Color(0xFF2C3A47),
         "borderList" to Color(0xFF1F242A),
@@ -82,7 +84,7 @@ class AdocThemeTest {
     )
 
     /**
-     * Схема-заглушка: 22 произвольных значения, не совпадающих ни с тёмной
+     * Схема-заглушка: 23 произвольных значения, не совпадающих ни с тёмной
      * палитрой, ни с каноническими светлыми (#FFFFFF / #000000) — чтобы её
      * нельзя было принять за образец будущей светлой темы.
      */
@@ -92,6 +94,7 @@ class AdocThemeTest {
         raised = Color(0xFF122232),
         sunken = Color(0xFF132333),
         toolbar = Color(0xFF142434),
+        pressed = Color(0xFF263646),
         borderChrome = Color(0xFF152535),
         borderObject = Color(0xFF162636),
         borderList = Color(0xFF172737),
