@@ -1,7 +1,7 @@
 = План работ — панель быстрой вставки
 :feature: 006-quick-insert-panel
 // plan-status: draft | active | done
-:plan-status: draft
+:plan-status: active
 :updated: 2026-08-17
 :horizon: детально спланирован этап E1; E2 — одной строкой, уточняется после ответов на открытые вопросы
 :toc: macro
