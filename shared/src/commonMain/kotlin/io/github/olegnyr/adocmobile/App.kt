@@ -3,6 +3,7 @@ package io.github.olegnyr.adocmobile
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,13 +13,15 @@ import androidx.compose.ui.unit.dp
 import io.github.olegnyr.adocmobile.theme.AdocTheme
 import io.github.olegnyr.adocmobile.theme.AdocTypography
 import io.github.olegnyr.adocmobile.theme.adocTextStyle
+import io.github.olegnyr.adocmobile.ui.AdocBlueprintBlock
 
 /**
  * Корневой composable приложения. Пока это заглушка каркаса: экраны появятся
- * в потоке 5, чертёжный блок — в SL-3.
+ * в потоке 5.
  *
  * Показанные строки подобраны так, чтобы на снимке экрана были видны все три
- * гарнитуры — это наблюдаемый результат слайса SL-2.
+ * гарнитуры (`SL-2`), а чертёжный блок прижат к горизонтальным краям экрана —
+ * это и есть условие ручной проверки `TC-6` (`SL-3`).
  */
 @Composable
 fun App() {
@@ -60,6 +63,21 @@ fun App() {
                     style = adocTextStyle(AdocTypography.sectionLabel),
                     color = AdocTheme.colors.textFaint,
                 )
+
+                // Без горизонтального отступа намеренно: блок прижат к краям
+                // экрана, и метки «+» должны остаться видны целиком (TC-6).
+                AdocBlueprintBlock(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "ЧЕРТЁЖНЫЙ БЛОК",
+                        style = adocTextStyle(AdocTypography.sectionLabel),
+                        color = AdocTheme.colors.textFaint,
+                    )
+                    Text(
+                        text = "main ↓2 ↑1 · 3 изменения",
+                        style = adocTextStyle(AdocTypography.metadata),
+                        color = AdocTheme.colors.accentText,
+                    )
+                }
             }
         }
     }

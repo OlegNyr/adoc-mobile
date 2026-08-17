@@ -72,7 +72,7 @@ toc::[]
 | Компонент «чертёжный блок» с четырьмя метками по углам
 | TC-6
 | SL-1
-| {st-todo}
+| {st-wip}
 |===
 
 Статусы: {st-todo} · {st-wip} · {st-done} (запись — в `progress.adoc`) · {st-hold} · {st-drop}

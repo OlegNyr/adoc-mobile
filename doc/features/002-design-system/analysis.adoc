@@ -7,7 +7,7 @@
 :owner: onyrk
 :created: 2026-08-17
 :updated: 2026-08-17
-:targets: shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/theme/**, shared/src/commonMain/composeResources/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/theme/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/App.kt, androidApp/src/main/res/values/**, androidApp/src/main/kotlin/io/github/olegnyr/adocmobile/android/MainActivity.kt
+:targets: shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/theme/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/ui/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/ui/**, shared/src/commonMain/composeResources/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/theme/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/App.kt, androidApp/src/main/res/values/**, androidApp/src/main/kotlin/io/github/olegnyr/adocmobile/android/MainActivity.kt
 :toc: macro
 :toc-title: Содержание
 :sectanchors:
@@ -189,8 +189,13 @@ Then  все четыре метки «+» видны целиком и не о�
 And   внутренние отступы содержимого блока не изменились по сравнению с блоком в середине экрана
 ----
 
-Тип `manual`: метки выносятся за границу контейнера на 5–6 px, и обрезание проявляется только при реальной отрисовке.
-Проверяется на подключённом устройстве снимком экрана.
+Тип `manual` — но только частично, и это уточнение внесено при реализации `SL-3`.
+
+Риск критерия сводится к одному числу: не выходит ли штрих метки за границы компонента.
+Поэтому геометрия блока вынесена чистой функцией и проверяется в `commonTest`: метки стоят на углах рамки, а рамка отодвинута от края компонента ровно на величину выноса, так что за границы не выходит ничего.
+Вырожденный размер (компонент уже двойного выноса) проверяется отдельно — иначе получилась бы рамка отрицательной ширины.
+
+Снимком экрана остаётся то, что числом не проверяется: метки видны, не сливаются с рамкой и читаются как знак `+`.
 
 === TC-7 (edge, automatable) — набор ролей не привязан к тёмной схеме
 
