@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Манифест только для debug-сборки: стенд замеров T-010 не должен попадать в релиз.
+  exported="true" нужен, чтобы стенд запускался с параметрами через adb; поскольку
+  манифест debug-only, экспортированной активности в релизном APK не будет.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+          Имя полное, а не относительное: относительное считается от namespace
+          (io.github.olegnyr.adocmobile.android), а не от applicationId, и
+          «.android.bench.BenchActivity» раскрывалось в несуществующий класс.
+        -->
+        <activity
+            android:name="io.github.olegnyr.adocmobile.android.bench.BenchActivity"
+            android:exported="true"
+            android:label="Стенд замеров"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
+    </application>
+
+</manifest>
