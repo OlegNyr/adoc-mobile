@@ -84,7 +84,7 @@ jobs:
         with:
           args: >-
             --offline
-            --include-fragments anchor-only
+            --include-fragments
             --no-progress
             --verbose
             'build/docs/*.html'
