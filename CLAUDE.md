@@ -47,7 +47,7 @@ There is no Gradle build, no Git repo, no tests. Before writing code, confirm wi
 - **One question at a time.** Ask the fork that changes the most downstream decisions, then wait. Never dump ten questions — the unanswered ones become invented requirements.
 - Feature artefacts live in `doc/features/NNN-<slug>/` in AsciiDoc, by the skill templates — the skills were rewritten for both (they originally defaulted to `docs/` and Markdown). File roles stay separate: `analysis.adoc` = what and why, `plan.adoc` = how work is sliced, `progress.adoc` = what was done, after the fact. Document attributes replace YAML frontmatter, and `:status:` drives `ifeval::` banners — write it as a single word, not a list of allowed values.
 - The skills are written for Java/Spring Boot. Their NFR checklist does not apply — use the project checklist in `doc/development-rules.adoc` (responsiveness thresholds, share of common code, offline, platform parity, lifecycle, user files, IME, secrets, accessibility, testability).
-- `.claude/rules/codestyle.md`, `contribution.md`, `ubiquitous-language.md` are referenced by the skills but do not exist here — the rules review lens runs at half strength until they do. Do not invent them.
+- `.claude/rules/` is empty. `codestyle.md` used to hold a **Java** style guide and was deleted as inapplicable to Kotlin; `contribution.md` and `ubiquitous-language.md` never existed. The skills reference all three, so the rules review lens checks `CLAUDE.md` and `doc/*-rules.adoc` instead. Do not invent them — a Kotlin style guide is a decision, not a gap to fill silently.
 
 ## Documentation rules (binding)
 

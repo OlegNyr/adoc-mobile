@@ -8,6 +8,51 @@ plugins {
     alias(libs.plugins.kotlinCompose)
 }
 
+/**
+ * TC-8 фичи 002-design-system: цвет в коде берётся только через роли палитры.
+ *
+ * Проверка сделана задачей сборки, а не тестом: тест из commonTest не имеет
+ * доступа к исходникам. Область — production-код; тесты исключены намеренно,
+ * они обязаны содержать ожидаемые значения, иначе им нечего сверять.
+ */
+val verifyNoColorLiterals by tasks.registering {
+    group = "verification"
+    description = "Литералы цвета вне файла определения палитры"
+
+    val paletteFile = "AdocColors.kt"
+    val sources = files(
+        rootDir.resolve("shared/src/commonMain"),
+        rootDir.resolve("shared/src/androidMain"),
+        rootDir.resolve("androidApp/src/main"),
+    )
+    inputs.files(sources).withPropertyName("sources")
+
+    doLast {
+        val literal = Regex("""Color\(0x[0-9a-fA-F]{8}|#[0-9a-fA-F]{6}\b""")
+        val offenders = sources.asFileTree
+            .matching { include("**/*.kt") }
+            .filter { it.name != paletteFile }
+            .mapNotNull { file ->
+                val hits = file.readLines()
+                    .withIndex()
+                    .filter { (_, line) -> literal.containsMatchIn(line) }
+                    .map { (i, line) -> "  ${file.name}:${i + 1}  ${line.trim()}" }
+                if (hits.isEmpty()) null else hits
+            }
+            .flatten()
+
+        if (offenders.isNotEmpty()) {
+            error(
+                "Литерал цвета в обход роли палитры (TC-8, границы работ 002-design-system):\n" +
+                    offenders.joinToString("\n") +
+                    "\nЦвет берётся из AdocTheme.colors, а не задаётся по месту.",
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyNoColorLiterals) }
+
 kotlin {
     // Блок называется android, а не androidLibrary: последний уже помечен устаревшим.
     android {

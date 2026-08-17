@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Тема окна до первой отрисовки Compose. Нужна, чтобы при холодном старте не
+  мелькал светлый фон Material.
+
+  Значение цвета продублировано здесь литералом вынужденно: ресурс читается
+  системой раньше, чем стартует Compose, и роль палитры к этому моменту
+  недоступна. Источник значения — роль ground, doc/design/design.adoc.
+-->
+<resources>
+    <style name="Theme.AdocMobile" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_ground</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

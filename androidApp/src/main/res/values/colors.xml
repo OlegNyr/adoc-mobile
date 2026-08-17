@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Единственное место, где цвет продублирован вне палитры. Обоснование — в themes.xml. -->
+<resources>
+    <color name="window_ground">#131518</color>
+</resources>
