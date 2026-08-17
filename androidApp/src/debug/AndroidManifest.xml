@@ -17,6 +17,13 @@
             android:exported="true"
             android:label="Стенд замеров"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
+
+        <!-- Стенд замеров рендера T-013. Имя тоже полное, по той же причине. -->
+        <activity
+            android:name="io.github.olegnyr.adocmobile.android.bench.RenderBenchActivity"
+            android:exported="true"
+            android:label="Стенд рендера"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
     </application>
 
 </manifest>

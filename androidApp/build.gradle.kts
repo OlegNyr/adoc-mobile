@@ -72,11 +72,44 @@ val verifyFontsPackaged = tasks.register("verifyFontsPackaged") {
     }
 }
 
-tasks.named("check") { dependsOn(verifyFontsPackaged) }
+/**
+ * То же самое для стенда рендера (`T-013`): бандл Asciidoctor.js и нативная
+ * библиотека QuickJS должны оказаться в debug-APK.
+ *
+ * Проверяется артефакт, а не объявление: ассет молча не упаковывается, а `.so`
+ * теряется при неудачной фильтрации ABI — и то и другое даёт зелёную сборку и
+ * падение на устройстве.
+ */
+val verifyRenderStandPackaged = tasks.register("verifyRenderStandPackaged") {
+    group = "verification"
+    description = "Бандл Asciidoctor.js и нативный QuickJS попали в debug-APK"
+    dependsOn("assembleDebug")
+
+    val apk = layout.buildDirectory.file("outputs/apk/debug/androidApp-debug.apk")
+    inputs.file(apk)
+
+    doLast {
+        val entries = ZipFile(apk.get().asFile).use { zip ->
+            zip.entries().asSequence().map { it.name }.toList()
+        }
+        check(entries.any { it == "assets/asciidoctor/asciidoctor.js" }) {
+            "Бандл Asciidoctor.js не попал в APK: нет assets/asciidoctor/asciidoctor.js"
+        }
+        check(entries.any { it.startsWith("lib/") && it.endsWith("libquickjs.so") }) {
+            "Нативная библиотека QuickJS не попала в APK: нет lib/*/libquickjs.so"
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyFontsPackaged, verifyRenderStandPackaged) }
 
 dependencies {
     // Compose приходит транзитивно из :shared через api — версии живут только в каталоге.
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime)
+
+    // Только debug: движок нужен стенду замеров T-013. В продуктовый код он
+    // приедет отдельной задачей, когда шов рендерера будет спроектирован.
+    debugImplementation(libs.quickjs.kt)
 }
