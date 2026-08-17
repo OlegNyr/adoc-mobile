@@ -160,6 +160,11 @@ internal object AdocLineScanner {
                     attributeContinues = line.endsWith(VALUE_CONTINUATION),
                 )
             }
+
+            blockMacroStyle(line)?.let { style ->
+                spans += wholeLine(offset, line, style)
+                return AdocLineResult(AdocLineRole.Boundary)
+            }
         }
 
         // Маркер списка — единственная конструкция, которой мало «начала блока»:
@@ -388,6 +393,31 @@ internal object AdocLineScanner {
         return start to end
     }
 
+    /**
+     * Роль строки блочного макроса `name::target[attrs]` (`FR-21`), или `null`.
+     *
+     * Имя — только из закрытого перечня [AdocMacroSyntax.INLINE_NAMES], поэтому
+     * `myplugin::x[]` остаётся текстом (`TC-25`), а `Примечание:: см. ниже` —
+     * списком определений (`TC-26`): у списка после разделителя стоит пробел,
+     * который правило цели не пускает. Распознаётся только в начале блока —
+     * прогон эталона 2026-08-17: посреди абзаца такая строка остаётся текстом.
+     * `include::` сюда не доходит: он снят раньше как директива (`FR-14`).
+     */
+    private fun blockMacroStyle(line: String): AdocStyle? {
+        if (!line.endsWith(']')) return null
+        for (name in AdocMacroSyntax.INLINE_NAMES) {
+            if (!line.startsWith(name)) continue
+            val separator = name.length
+            if (!line.regionMatches(separator, BLOCK_MACRO_SEPARATOR, 0, BLOCK_MACRO_SEPARATOR.length)) continue
+            val bracket = line.indexOf('[', separator + BLOCK_MACRO_SEPARATOR.length)
+            if (bracket < 0) return null
+            val target = line.substring(separator + BLOCK_MACRO_SEPARATOR.length, bracket)
+            if (!AdocMacroSyntax.targetAllowed(name, target)) return null
+            return AdocMacroSyntax.styleFor(name)
+        }
+        return null
+    }
+
     /** Длина метки абзацного admonition вместе с двоеточием (`FR-12`), или `null`. */
     private fun admonitionLabelLength(line: String): Int? {
         for (label in ADMONITIONS) {
@@ -435,6 +465,7 @@ internal object AdocLineScanner {
      * Жёсткая форма переноса (` + \`) под это правило подходит тоже.
      */
     private const val VALUE_CONTINUATION = " \\"
+    private const val BLOCK_MACRO_SEPARATOR = "::"
     private const val DEFINITION_COLON = "::"
     private const val DEFINITION_SEMICOLON = ";;"
     private const val MARKDOWN_BREAK_MARKS = "-*_"

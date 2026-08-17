@@ -26,6 +26,14 @@ package io.github.olegnyr.adocmobile.highlight
  * документации, — прогон Asciidoctor 2.0.26 от 2026-08-17 показал, что проза
  * строже реализации (`(*скобки*)` даёт полужирный, хотя документация требует
  * слева пробел). Все спорные места этого файла сняты тем же прогоном.
+ *
+ * `SL-4` добавил хвост порядка подстановок эталона: после группы `quotes` идут
+ * ссылки на атрибуты (`FR-22`), затем группа `macros` — макросы закрытого
+ * перечня, перекрёстные ссылки и автоссылки (`FR-21`). Группа `replacements`
+ * (типографские замены `...`, `(C)` и подобные) не реализуется — её нет в
+ * требованиях; единственное видимое следствие — автоссылка с многоточием на
+ * конце размечается без него, а эталон успевает превратить точки в символ
+ * многоточия и утащить его в ссылку.
  */
 internal object AdocInlineScanner {
 
@@ -49,6 +57,14 @@ internal object AdocInlineScanner {
 
         scanContiguous(text, '^', AdocStyle.Superscript, consumed, emit)
         scanContiguous(text, '~', AdocStyle.Subscript, consumed, emit)
+
+        // Хвост порядка подстановок (`SL-4`): атрибуты после `quotes`, затем
+        // макросы и ссылки. Автоссылки идут последними, чтобы `link:URL[…]`
+        // достался проходу макросов целиком, а не разобрался на две конструкции.
+        scanAttributeReferences(text, consumed, emit)
+        scanMacros(text, consumed, emit)
+        scanCrossReferences(text, consumed, emit)
+        scanAutolinks(text, consumed, emit)
     }
 
     // region passthrough — FR-18
@@ -283,6 +299,181 @@ internal object AdocInlineScanner {
 
     // endregion
 
+    // region макросы, ссылки, атрибуты — FR-21, FR-22
+
+    /**
+     * Ссылка на атрибут `{name}` (`FR-22`).
+     *
+     * Имя — буква или цифра, дальше буквы, цифры, `-` и `_`; кириллица допустима
+     * (прогон эталона: `{кир}` подставляется). Пробел в имени делает скобки
+     * обычным текстом. Определён ли атрибут — сканер не проверяет: таблицу
+     * атрибутов он не ведёт, и ссылка размечается по форме; эталон оставляет
+     * неопределённую ссылку текстом — расхождение записано в отчёте слайса.
+     */
+    private fun scanAttributeReferences(text: String, consumed: BooleanArray, emit: Emit) {
+        var i = text.indexOf('{')
+        while (i >= 0 && i < text.length - 2) {
+            if (consumed[i] || backslashesBefore(text, i) > 0 || !text[i + 1].isLetterOrDigit()) {
+                i = text.indexOf('{', i + 1)
+                continue
+            }
+            var j = i + 2
+            while (j < text.length && text[j].isAttributeNameChar()) j++
+            if (j >= text.length || text[j] != '}' || anyConsumed(consumed, i, j + 1)) {
+                i = text.indexOf('{', i + 1)
+                continue
+            }
+            emit(i, j + 1, AdocStyle.AttributeReference)
+            consume(consumed, i, j + 1)
+            i = text.indexOf('{', j + 1)
+        }
+    }
+
+    /**
+     * Инлайновый макрос `name:target[attrs]` по закрытому перечню `FR-21`.
+     *
+     * Границы слова слева нет: прогон эталона 2026-08-17 показал, что
+     * `хвостimage:pic.png[]` срабатывает. Цель не начинается с `:` — двойное
+     * двоеточие означает блочную форму, которая посреди абзаца остаётся
+     * текстом. Правила цели зависят от имени — [AdocMacroSyntax.targetAllowed].
+     */
+    private fun scanMacros(text: String, consumed: BooleanArray, emit: Emit) {
+        for (name in AdocMacroSyntax.INLINE_NAMES) {
+            val token = "$name:"
+            var i = text.indexOf(token)
+            while (i >= 0) {
+                val targetStart = i + token.length
+                if (consumed[i] || backslashesBefore(text, i) > 0 || targetStart >= text.length) {
+                    i = text.indexOf(token, i + 1)
+                    continue
+                }
+                var bracket = targetStart
+                while (bracket < text.length && text[bracket] != '[' && text[bracket] != '\n') bracket++
+                if (bracket >= text.length || text[bracket] != '[' || consumed[bracket]) {
+                    i = text.indexOf(token, i + 1)
+                    continue
+                }
+                val target = text.substring(targetStart, bracket)
+                if (!AdocMacroSyntax.targetAllowed(name, target)) {
+                    i = text.indexOf(token, i + 1)
+                    continue
+                }
+                val close = indexOfUnescaped(text, ']', bracket + 1)
+                if (close < 0 || consumed[close]) {
+                    i = text.indexOf(token, i + 1)
+                    continue
+                }
+                emit(i, close + 1, AdocMacroSyntax.styleFor(name))
+                consume(consumed, i, close + 1)
+                i = text.indexOf(token, close + 1)
+            }
+        }
+    }
+
+    /**
+     * Перекрёстная ссылка `<<target>>` и `<<target,текст>>` (`FR-21`).
+     *
+     * Содержимое непустое, без `<`, `>` и перевода строки; экранирование —
+     * один слэш перед `<<`, как показал прогон эталона.
+     */
+    private fun scanCrossReferences(text: String, consumed: BooleanArray, emit: Emit) {
+        var i = text.indexOf(XREF_OPEN)
+        while (i >= 0) {
+            if (consumed[i] || consumed[i + 1] || backslashesBefore(text, i) > 0) {
+                i = text.indexOf(XREF_OPEN, i + 2)
+                continue
+            }
+            val close = text.indexOf(XREF_CLOSE, i + 2)
+            if (close < 0) return
+            val body = text.substring(i + 2, close)
+            if (body.isEmpty() || body.any { it == '<' || it == '>' || it == '\n' } ||
+                consumed[close] || consumed[close + 1]
+            ) {
+                i = text.indexOf(XREF_OPEN, i + 2)
+                continue
+            }
+            emit(i, close + 2, AdocStyle.CrossReference)
+            consume(consumed, i, close + 2)
+            i = text.indexOf(XREF_OPEN, close + 2)
+        }
+    }
+
+    /**
+     * Автоссылки `FR-21`: голые URL схем `http`, `https`, `ftp`, `irc` и форма
+     * с текстом `URL[текст]`; `mailto:` — только с `[…]`.
+     *
+     * Все границы сняты прогоном эталона 2026-08-17:
+     *
+     * * слева нужна граница — начало, пробельный символ или один из `<>()[];"'`;
+     *   `слитноhttp://…` ссылкой не становится;
+     * * URL тянется до пробельного символа, `[`, `]`, `<` — или до знака уже
+     *   размеченного форматирования: `http://…/_подчерк_/x` даёт ссылку только
+     *   до подчёркиваний, потому что группа `quotes` уже съела курсив;
+     * * финальные знаки препинания и закрывающая скобка в ссылку не входят;
+     * * голый `mailto:адрес` у эталона остаётся текстом — вопреки `FR-21`,
+     *   перечислившему mailto среди автоссылок; расхождение в отчёте слайса.
+     */
+    private fun scanAutolinks(text: String, consumed: BooleanArray, emit: Emit) {
+        for (scheme in BARE_SCHEMES) scanScheme(text, scheme, requireBrackets = false, consumed, emit)
+        scanScheme(text, MAILTO_SCHEME, requireBrackets = true, consumed, emit)
+    }
+
+    private fun scanScheme(
+        text: String,
+        scheme: String,
+        requireBrackets: Boolean,
+        consumed: BooleanArray,
+        emit: Emit,
+    ) {
+        var i = text.indexOf(scheme)
+        while (i >= 0) {
+            if (consumed[i] || backslashesBefore(text, i) > 0 ||
+                (!requireBrackets && !allowsAutolinkStart(text, i))
+            ) {
+                i = text.indexOf(scheme, i + 1)
+                continue
+            }
+            var j = i + scheme.length
+            while (j < text.length && !text[j].isWhitespace() && text[j] !in URL_STOP && !consumed[j]) j++
+            if (j == i + scheme.length) {
+                i = text.indexOf(scheme, i + 1)
+                continue
+            }
+
+            // URL, упирающийся в `[`, — форма с текстом: скобки входят в ссылку.
+            if (j < text.length && text[j] == '[' && !consumed[j]) {
+                val close = indexOfUnescaped(text, ']', j + 1)
+                if (close >= 0 && !consumed[close]) {
+                    emit(i, close + 1, AdocStyle.Link)
+                    consume(consumed, i, close + 1)
+                    i = text.indexOf(scheme, close + 1)
+                    continue
+                }
+            }
+            if (requireBrackets) {
+                i = text.indexOf(scheme, j)
+                continue
+            }
+
+            var end = j
+            while (end > i + scheme.length && text[end - 1] in TRAILING_PUNCTUATION) end--
+            if (end > i + scheme.length) {
+                emit(i, end, AdocStyle.Link)
+                consume(consumed, i, end)
+            }
+            i = text.indexOf(scheme, j)
+        }
+    }
+
+    /** Граница слева от автоссылки — по классу символов ссылочного прохода эталона. */
+    private fun allowsAutolinkStart(text: String, index: Int): Boolean {
+        if (index == 0) return true
+        val previous = text[index - 1]
+        return previous.isWhitespace() || previous in AUTOLINK_BOUNDARY
+    }
+
+    // endregion
+
     // region вспомогательное
 
     /**
@@ -326,11 +517,29 @@ internal object AdocInlineScanner {
         for (i in from until toExclusive) consumed[i] = true
     }
 
+    private fun anyConsumed(consumed: BooleanArray, from: Int, toExclusive: Int): Boolean {
+        for (i in from until toExclusive) if (consumed[i]) return true
+        return false
+    }
+
+    /** Первая позиция [symbol] без слэша перед ней, начиная с [from], или -1. */
+    private fun indexOfUnescaped(text: String, symbol: Char, from: Int): Int {
+        var i = from
+        while (i < text.length) {
+            if (text[i] == symbol && text[i - 1] != '\\') return i
+            i++
+        }
+        return -1
+    }
+
     /** Класс «слово» эталона: буква любого алфавита, цифра, подчёркивание. */
     private fun Char.isWordChar(): Boolean = isLetterOrDigit() || this == '_'
 
     /** Символ списка подстановок `pass:c,q[…]`: латиница, запятая, дефис. */
     private fun Char.isSubsListChar(): Boolean = this in 'a'..'z' || this == ',' || this == '-'
+
+    /** Символ имени атрибута после первого: буква, цифра, `-`, `_` (`FR-22`). */
+    private fun Char.isAttributeNameChar(): Boolean = isLetterOrDigit() || this == '-' || this == '_'
 
     // endregion
 
@@ -349,6 +558,43 @@ internal object AdocInlineScanner {
     private const val DOUBLED_ESCAPE = 2
     private const val MIN_CONSTRUCT_LENGTH = 3
     private const val MIN_PREFIX_LENGTH = 3
+    private const val XREF_OPEN = "<<"
+    private const val XREF_CLOSE = ">>"
+    private const val MAILTO_SCHEME = "mailto:"
+    private const val URL_STOP = "[]<"
+    private const val TRAILING_PUNCTUATION = ".,;:!?)"
+    private const val AUTOLINK_BOUNDARY = "<>()[];\"'"
+    private val BARE_SCHEMES = listOf("https://", "http://", "ftp://", "irc://")
+}
+
+/**
+ * Синтаксис макросов `FR-21`, общий для инлайнового прохода и строчного
+ * сканера: закрытый перечень имён, роли и правила цели.
+ *
+ * Перечень закрыт решением владельца; правила цели у имён разные, и все они
+ * сняты прогоном эталона 2026-08-17: `image` и `xref` пускают пробелы внутри
+ * цели (`image:тут пробел.png[]` работает — разведка ошибочно запрещала пробелы
+ * всем), `link` и `footnote` — нет, цель `kbd` всегда пуста.
+ */
+internal object AdocMacroSyntax {
+
+    /** Имена, у которых есть инлайновая и блочная форма. `include` — не здесь: он директива (`FR-14`). */
+    val INLINE_NAMES: List<String> = listOf("image", "xref", "link", "footnote", "kbd")
+
+    /** Роль конструкции: обе формы перекрёстной ссылки выглядят одинаково. */
+    fun styleFor(name: String): AdocStyle =
+        if (name == "xref") AdocStyle.CrossReference else AdocStyle.Macro
+
+    /** Допустима ли цель [target] у макроса [name]. */
+    fun targetAllowed(name: String, target: String): Boolean {
+        if (target.startsWith(':')) return false // двойное двоеточие — блочная форма
+        return when (name) {
+            "kbd" -> target.isEmpty()
+            "footnote" -> target.none { it.isWhitespace() }
+            "link" -> target.isNotEmpty() && target.none { it.isWhitespace() }
+            else -> target.isNotEmpty() && !target.first().isWhitespace() && !target.last().isWhitespace()
+        }
+    }
 }
 
 /** Приёмник конструкции: полуинтервал в координатах логической строки и роль. */

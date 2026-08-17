@@ -3,7 +3,7 @@
 // tier: S | M | L
 :tier: M
 // status: draft | approved | in-progress | done — управляет плашкой ниже, писать одним словом
-:status: draft
+:status: approved
 :owner: onyrk
 :created: 2026-08-17
 :updated: 2026-08-17

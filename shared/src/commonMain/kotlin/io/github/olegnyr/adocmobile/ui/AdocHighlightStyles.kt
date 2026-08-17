@@ -3,6 +3,7 @@ package io.github.olegnyr.adocmobile.ui
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import io.github.olegnyr.adocmobile.highlight.AdocStyle
 import io.github.olegnyr.adocmobile.theme.AdocColors
 
@@ -108,6 +109,18 @@ class AdocHighlightStyles(colors: AdocColors) {
                 // обычного текста, приглушённый цвет — от акцентных ролей.
                 AdocStyle.Superscript, AdocStyle.Subscript ->
                     SpanStyle(color = colors.textMuted, fontStyle = FontStyle.Italic)
+
+                // Роли слайса SL-4. Макет: «ссылки — accentText». Подчёркивание
+                // отличает внешнюю ссылку от перекрёстной не только цветом.
+                AdocStyle.Link ->
+                    SpanStyle(color = colors.accentText, textDecoration = TextDecoration.Underline)
+                AdocStyle.CrossReference -> SpanStyle(color = colors.accentText)
+
+                // Макрос и ссылка на атрибут — машинная запись, как записи
+                // атрибутов; полужирный отделяет макрос от них.
+                AdocStyle.Macro ->
+                    SpanStyle(color = colors.accentSecondary, fontWeight = FontWeight.Bold)
+                AdocStyle.AttributeReference -> SpanStyle(color = colors.accentSecondary)
             }
         }
 

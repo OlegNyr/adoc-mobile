@@ -270,10 +270,18 @@ class AdocLineScannerTest {
     @Test
     fun TC_13_blockMacroIsNotADefinitionList() {
         // `image::pic.png[]` отличается от списка определений ровно отсутствием
-        // пробела после разделителя. Сам макрос — слайс `SL-4`; здесь важно, что
-        // `SL-2` не разметил его термином.
+        // пробела после разделителя. До `SL-4` оракул был «диапазонов нет»; с
+        // приходом макросов первая строка стала блочным макросом, а URL со `::`
+        // внутри — автоссылкой целиком (прогон эталона 2026-08-17 подтверждает
+        // обе конструкции). Термином не размечена ни одна — в этом смысл кейса.
         val src = Source("image::pic.png[]", "", "http://example.org/a::b")
-        assertEquals(emptyList(), src.scan().spans)
+        assertEquals(
+            listOf(
+                AdocSpan(src.line(0), AdocStyle.Macro),
+                AdocSpan(src.line(2), AdocStyle.Link),
+            ),
+            src.scan().spans,
+        )
     }
 
     @Test
