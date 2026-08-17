@@ -10,6 +10,8 @@ import io.github.olegnyr.adocmobile.document.DocumentOpenResult
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentWriteResult
 import io.github.olegnyr.adocmobile.document.openDocument
+import io.github.olegnyr.adocmobile.preview.PreviewStatus
+import io.github.olegnyr.adocmobile.render.AdocRenderer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,12 +42,16 @@ class EditorScreenModelTest {
 
     private val held = DocumentSource(id = "content://doc/1", displayName = "заметка.adoc")
 
+    private val renderer = FakeRenderer()
+
     private fun model(editor: DocumentEditor = DocumentEditor()): EditorScreenModel =
         EditorScreenModel(
             editor = editor,
             access = access,
+            renderer = renderer,
             scope = scope,
             clock = { now },
+            page = { fragment -> "<page>$fragment</page>" },
             delayUntil = waits::wait,
         )
 
@@ -207,6 +213,60 @@ class EditorScreenModelTest {
 
         model.openRunner()
         assertEquals("= Заголовок", editor.textFieldState.text.toString(), "документ загружен с диска")
+    }
+
+    @Test
+    fun TC_11_visibilitySignalReachesPipelineAndFollowsDocument() {
+        access.held = held
+        access.contents[held.id] = "первый"
+        val other = DocumentSource(id = "content://doc/2", displayName = "другой.adoc")
+        access.contents[other.id] = "второй"
+        val model = model()
+        model.start()
+
+        // Пока превью скрыто, правки не рождают ни одного рендера (TC-11).
+        // Правка идёт через поле, как в продукте: пайплайн берёт снимок текста
+        // из TextFieldState — единственного источника истины (FR-6).
+        model.typeText("первый правленый")
+        assertEquals(0, renderer.requests.size, "при скрытом превью движок молчит")
+
+        // Показ превью — немедленный рендер текущего текста поля.
+        model.previewVisibilityChanged(visible = true)
+        assertEquals(listOf("первый правленый"), renderer.requests)
+        assertEquals(PreviewStatus.Content, model.openRunnerPreview().status)
+
+        // Повторный тот же сигнал (рекомпозиция, поворот) ничего не перезапускает.
+        model.previewVisibilityChanged(visible = true)
+        assertEquals(1, renderer.requests.size, "неизменившаяся видимость не перезапускает рендер")
+
+        // Новый документ при видимом превью: новый пайплайн рендерит сразу,
+        // и это его первый рендер — прежний HTML не наследуется.
+        model.open(other)
+        assertEquals("второй", renderer.requests.last(), "пайплайн следует за документом")
+
+        // Скрытие доезжает до пайплайна: дальше правки не рендерятся.
+        model.previewVisibilityChanged(visible = false)
+        val before = renderer.requests.size
+        model.typeText("второй правленый")
+        now += 10_000
+        waits.releaseAll()
+        assertEquals(before, renderer.requests.size, "скрытое превью не рендерит и по паузе")
+    }
+
+    /** Правка как в продукте: сначала поле, затем событие модели (подписка `snapshotFlow`). */
+    private fun EditorScreenModel.typeText(text: String) {
+        editor.textFieldState.edit { replace(0, length, text) }
+        textEdited(text)
+    }
+
+    private fun EditorScreenModel.openRunnerPreview() =
+        assertIs<EditorDocument.Open>(document).preview
+
+    /** Рендерер-подделка: считает запросы; исполнителя проверяет `PreviewPipelineTest`. */
+    private class FakeRenderer : AdocRenderer {
+        val requests = mutableListOf<String>()
+
+        override suspend fun render(source: String): String = "HTML($source)".also { requests += source }
     }
 
     /** Шов-подделка по образцу `AutosaveRunnerTest`: содержимое и исходы задаются тестом. */

@@ -8,12 +8,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.olegnyr.adocmobile.document.AndroidDocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.render.installAdocRenderer
@@ -85,6 +89,23 @@ private fun EditorScreenHost() {
         }
     }
 
+    // Передний план — сигнал для превью (OQ-5 фичи 003): в фоне движок молчит.
+    // ON_STOP, а не ON_PAUSE: разделённый экран и системные диалоги не должны
+    // гасить превью, пока активность видна.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var foreground by remember { mutableStateOf(true) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> foreground = true
+                Lifecycle.Event.ON_STOP -> foreground = false
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     EditorScreen(
         access = access,
         requestDocument = {
@@ -94,5 +115,6 @@ private fun EditorScreenHost() {
             picker.launch(arrayOf("*/*"))
             request.await()
         },
+        foreground = foreground,
     )
 }

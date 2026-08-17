@@ -3,6 +3,7 @@
 package io.github.olegnyr.adocmobile.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +44,10 @@ import androidx.compose.ui.unit.dp
 import io.github.olegnyr.adocmobile.document.DocumentEditor
 import io.github.olegnyr.adocmobile.document.DocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentSource
+import io.github.olegnyr.adocmobile.preview.AdocPreview
+import io.github.olegnyr.adocmobile.preview.PreviewFailure
+import io.github.olegnyr.adocmobile.preview.PreviewStatus
+import io.github.olegnyr.adocmobile.render.adocRenderer
 import io.github.olegnyr.adocmobile.theme.AdocTheme
 import io.github.olegnyr.adocmobile.theme.AdocTypography
 import io.github.olegnyr.adocmobile.theme.adocTextStyle
@@ -74,12 +80,17 @@ enum class EditorTab { Editor, Preview }
  * с удержанным правом или `null`, если пользователь передумал. Сейчас это диалог
  * файла; решение владельца — открывать папку (`OQ-1`), и когда слайс tree-доступа
  * фичи 004 приедет, поменяется ровно эта точка.
+ * @param foreground приложение на переднем плане. Сигнал подаёт платформенный
+ * хостинг (у Compose Multiplatform общего lifecycle-примитива в зависимостях
+ * проекта нет): уход в фон гасит видимость превью, и движок молчит (`OQ-5`
+ * фичи 003).
  */
 @Composable
 fun EditorScreen(
     access: DocumentFileAccess,
     requestDocument: suspend () -> DocumentSource?,
     modifier: Modifier = Modifier,
+    foreground: Boolean = true,
 ) {
     AdocTheme {
         Surface(
@@ -94,6 +105,9 @@ fun EditorScreen(
                 EditorScreenModel(
                     editor = editor,
                     access = access,
+                    // Движок-синглтон процесса (FR-3 фичи 003): пайплайну
+                    // достаётся контракт, а не платформа.
+                    renderer = adocRenderer(),
                     scope = scope,
                     clock = { Clock.System.now().toEpochMilliseconds() },
                 )
@@ -121,6 +135,17 @@ fun EditorScreen(
             var selectedTabName by rememberSaveable { mutableStateOf(EditorTab.Editor.name) }
             val selectedTab = EditorTab.valueOf(selectedTabName)
             val focusManager = LocalFocusManager.current
+
+            // Честный сигнал видимости превью (FR-13): вкладка выбрана, документ
+            // открыт и приложение на переднем плане — всё три сразу. Модель
+            // идемпотентна, поэтому рекомпозиция с тем же значением безвредна.
+            LaunchedEffect(document, selectedTab, foreground) {
+                model.previewVisibilityChanged(
+                    visible = document is EditorDocument.Open &&
+                        selectedTab == EditorTab.Preview &&
+                        foreground,
+                )
+            }
 
             Column(modifier = Modifier.fillMaxSize()) {
                 // Обе хром-панели на одном фоне chrome; отступ статус-бара
@@ -160,9 +185,19 @@ fun EditorScreen(
                                     .imePadding()
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                             )
-                            if (selectedTab == EditorTab.Preview) {
-                                PreviewStub(modifier = Modifier.fillMaxSize())
-                            }
+                            // Панель превью не покидает композицию при уходе на
+                            // вкладку редактора, а паркуется за краем экрана:
+                            // пересоздание уничтожило бы WebView вместе с его
+                            // прокруткой, и возврат на превью начинался бы с
+                            // верха документа (FR-4). Сохранение прокрутки
+                            // внутри AdocPreview работает только на живой вью.
+                            PreviewPane(
+                                preview = document.preview,
+                                onRetry = model::previewRetryRequested,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .parkedOffscreenWhen(selectedTab != EditorTab.Preview),
+                            )
                         }
 
                         EditorDocument.None -> EmptyState(
@@ -342,24 +377,149 @@ private fun PrimaryButton(label: String, onClick: () -> Unit) {
 }
 
 /**
- * Заглушка вкладки превью: живой пайплайн фичи 003 подключает слайс `SL-2`.
+ * Вкладка превью — живой пайплайн (`FR-13`, `FR-14`).
  *
  * Непрозрачный фон роли `ground` перекрывает полотно редактора, которое
- * осталось в композиции ради каретки и прокрутки (`FR-3`); пустой обработчик
- * касаний не пускает их сквозь заглушку в поле ввода.
+ * осталось в композиции ради каретки и прокрутки (`FR-3`); фон превью и фон
+ * экрана — одна роль, вспышки нет (`FR-15`). Пустой обработчик касаний не
+ * пускает их сквозь свободные места в поле ввода под превью.
+ *
+ * Состояния — по [PreviewStatus] (решение `OQ-1` фичи 003): индикатор только
+ * первому рендеру; дальше на время перерендера молча держится предыдущий HTML.
+ * Отказ рендера — плашка с «Повторить» поверх последнего удачного HTML
+ * (решение `OQ-2` фичи 003; язык плашки един с плашкой отказа записи, `OQ-3`).
  */
 @Composable
-private fun PreviewStub(modifier: Modifier = Modifier) {
+private fun PreviewPane(
+    preview: PreviewPipeline,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Уведомление о межфайловой ссылке (FR-28 фичи 003): документ по xref не
+    // открыт. Живёт до касания, до следующей ссылки или до смены документа.
+    var documentLinkNotice by remember(preview) { mutableStateOf<String?>(null) }
+
     Box(
         modifier = modifier
             .background(AdocTheme.colors.ground)
             .pointerInput(Unit) { detectTapGestures { } },
-        contentAlignment = Alignment.Center,
+    ) {
+        val html = preview.html
+        if (html != null) {
+            AdocPreview(
+                html = html,
+                modifier = Modifier.fillMaxSize(),
+                onDocumentLink = { path -> documentLinkNotice = "Документ не открыт: $path" },
+            )
+        } else if (preview.status == PreviewStatus.FirstRender) {
+            // Индикатор первого рендера: показать ещё нечего (OQ-1 фичи 003).
+            Text(
+                text = "РЕНДЕР…",
+                style = adocTextStyle(AdocTypography.sectionLabel),
+                color = AdocTheme.colors.textFaint,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+
+        Column(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+            preview.failure?.let { failure ->
+                PreviewFailureBanner(failure = failure, onRetry = onRetry)
+            }
+            documentLinkNotice?.let { notice ->
+                NoticeBanner(text = notice, onDismiss = { documentLinkNotice = null })
+            }
+        }
+    }
+}
+
+/**
+ * Плашка отказа рендера — решения `OQ-2` фичи 003 и `OQ-3` этой фичи: полоса
+ * под панелями с человеческим текстом и кнопкой «Повторить»; техника — по
+ * касанию текста. Последний удачный HTML под плашкой продолжает показываться.
+ */
+@Composable
+private fun PreviewFailureBanner(failure: PreviewFailure, onRetry: () -> Unit) {
+    var showDetail by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth().background(AdocTheme.colors.raised)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { showDetail = !showDetail },
+            ) {
+                Text(
+                    text = failure.userMessage,
+                    style = adocTextStyle(AdocTypography.listItem),
+                    color = AdocTheme.colors.textSecondary,
+                )
+                if (showDetail) {
+                    Text(
+                        text = failure.technicalDetail,
+                        style = adocTextStyle(AdocTypography.metadata),
+                        color = AdocTheme.colors.textFaint,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+            SecondaryButton(label = "ПОВТОРИТЬ", onClick = onRetry)
+        }
+        ChromeDivider()
+    }
+}
+
+/** Однострочное уведомление в языке плашек; касание убирает его. */
+@Composable
+private fun NoticeBanner(text: String, onDismiss: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AdocTheme.colors.raised)
+            .clickable(onClick = onDismiss),
     ) {
         Text(
-            text = "ПРЕВЬЮ ЕЩЁ НЕ ПОДКЛЮЧЕНО",
-            style = adocTextStyle(AdocTypography.sectionLabel),
-            color = AdocTheme.colors.textFaint,
+            text = text,
+            style = adocTextStyle(AdocTypography.metadata),
+            color = AdocTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+        )
+        ChromeDivider()
+    }
+}
+
+/**
+ * Спрятать компонент, не выводя его из композиции: он измеряется как обычно,
+ * но помещается за правым краем родителя — вне экрана и вне касаний.
+ *
+ * Нужен вкладке превью: `WebView` хранит прокрутку в самом себе, и пережить
+ * переключение вкладок она может только вместе с живой вью (`FR-4`).
+ * Альфа и `zIndex` не подходят: платформенная вью с нулевой альфой продолжает
+ * получать касания поверх редактора.
+ */
+private fun Modifier.parkedOffscreenWhen(parked: Boolean): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height) {
+        placeable.place(x = if (parked) placeable.width else 0, y = 0)
+    }
+}
+
+/** Вторичная кнопка по описанию дизайна: прозрачный фон, рамка, текст вторичный. */
+@Composable
+private fun SecondaryButton(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .border(1.dp, AdocTheme.colors.borderObject)
+            .clickable(role = Role.Button, onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            style = adocTextStyle(AdocTypography.buttonLabel),
+            color = AdocTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
     }
 }

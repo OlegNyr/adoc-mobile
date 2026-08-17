@@ -9,6 +9,8 @@ import io.github.olegnyr.adocmobile.document.DocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentOpenResult
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentState
+import io.github.olegnyr.adocmobile.preview.previewPage
+import io.github.olegnyr.adocmobile.render.AdocRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -34,8 +36,11 @@ sealed interface EditorDocument {
      */
     data class OpenFailed(val message: String) : EditorDocument
 
-    /** Документ открыт; [runner] несёт модель документа и автосохранение. */
-    data class Open(val runner: AutosaveRunner) : EditorDocument
+    /**
+     * Документ открыт; [runner] несёт модель документа и автосохранение,
+     * [preview] — живой пайплайн превью этого документа (`FR-13`).
+     */
+    data class Open(val runner: AutosaveRunner, val preview: PreviewPipeline) : EditorDocument
 }
 
 /**
@@ -77,8 +82,10 @@ const val EDITOR_MODIFIED_LABEL: String = "ИЗМЕНЁН · НЕ СОХРАНЁ
 class EditorScreenModel(
     val editor: DocumentEditor,
     private val access: DocumentFileAccess,
+    private val renderer: AdocRenderer,
     private val scope: CoroutineScope,
     private val clock: () -> Long,
+    private val page: suspend (fragment: String) -> String = { fragment -> previewPage(fragment) },
     private val delayUntil: suspend (dueAt: Long) -> Unit = { dueAt ->
         delay((dueAt - clock()).coerceAtLeast(0))
     },
@@ -135,13 +142,46 @@ class EditorScreenModel(
     }
 
     /**
-     * Каждое изменение текста поля — в модель (`FR-10`).
+     * Видна ли пользователю вкладка превью — с учётом фона приложения.
+     *
+     * Хранится в holder-е, а не только в композиции, потому что переживает
+     * смену документа: новый пайплайн обязан узнать о видимости сразу.
+     */
+    private var previewVisible = false
+
+    /**
+     * Каждое изменение текста поля — в модель (`FR-10`) и в пайплайн превью
+     * (`FR-13`; текст пайплайну не передаётся — политика возьмёт снимок,
+     * когда истечёт пауза, решение `FR-16` фичи 003).
      *
      * Зовётся подпиской экрана на `TextFieldState` (`snapshotFlow`); без
      * открытого документа изменений быть не может — пустое поле не редактируется.
      */
     fun textEdited(text: String) {
-        (document as? EditorDocument.Open)?.runner?.textEdited(text)
+        val open = document as? EditorDocument.Open ?: return
+        open.runner.textEdited(text)
+        open.preview.textEdited()
+    }
+
+    /**
+     * Честный сигнал видимости превью (`FR-13`): вкладка `ПРЕВЬЮ` на переднем
+     * плане — и только она. Уход приложения в фон — тоже «скрыто» (`OQ-5`
+     * фичи 003): рендерить страницу, которую никто не видит, незачем, а
+     * начатый рендер прерывается.
+     *
+     * Сигнал идемпотентен: повторное значение (рекомпозиция, поворот) не
+     * перезапускает рендер.
+     */
+    fun previewVisibilityChanged(visible: Boolean) {
+        if (visible == previewVisible) return
+        previewVisible = visible
+        val open = document as? EditorDocument.Open ?: return
+        if (visible) open.preview.previewShown() else open.preview.previewHidden()
+    }
+
+    /** Кнопка «Повторить» на плашке отказа рендера — язык плашки решён `OQ-3`. */
+    fun previewRetryRequested() {
+        (document as? EditorDocument.Open)?.preview?.retryRequested()
     }
 
     private fun attach(opened: DocumentState, keepField: Boolean) {
@@ -170,6 +210,23 @@ class EditorScreenModel(
             runner.textEdited(fieldText)
         }
 
-        document = EditorDocument.Open(runner)
+        // Пайплайн превью — тоже по экземпляру на документ (политика фичи 003
+        // рассчитана на один документ, и первый рендер нового документа снова
+        // получает индикатор). Снимок текста берётся из поля: единственный
+        // источник истины — TextFieldState (FR-6).
+        val preview = PreviewPipeline(
+            renderer = renderer,
+            scope = docScope,
+            clock = clock,
+            sourceText = { editor.textFieldState.text.toString() },
+            page = page,
+            delayUntil = delayUntil,
+        )
+
+        document = EditorDocument.Open(runner, preview)
+
+        // Документ сменился при видимом превью: новый пайплайн узнаёт о
+        // видимости сразу и рендерит без дебаунса, как при показе вкладки.
+        if (previewVisible) preview.previewShown()
     }
 }
