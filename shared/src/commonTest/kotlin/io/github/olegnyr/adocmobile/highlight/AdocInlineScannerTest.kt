@@ -431,6 +431,53 @@ class AdocInlineScannerTest {
     }
 
     @Test
+    fun TC_22_escapedUnconstrainedPairConsumesItsClosingMarks() {
+        val src = Source("\\\\__экранировано__, а \\__не экранировано__ тут")
+
+        // Дефект, найденный сверкой SL-6, закреплён прогоном эталона 2026-08-17
+        // (SL-7): `\\__экранировано__` литерально ЦЕЛИКОМ — его закрывающая
+        // пара не имеет права сцепиться накрест с открывающей следующей
+        // конструкции. Вторая пара при этом курсив даёт.
+        assertEquals(
+            listOf(AdocSpan(src.inLine(0, 23, 42), AdocStyle.Italic)),
+            src.scan().spans,
+        )
+    }
+
+    @Test
+    fun TC_22_escapedPairsStayLiteralInIsolationAndInARow() {
+        val src = Source(
+            "хвост \\\\__в конце строки__", // 0  прогон K02
+            "", // 1
+            "\\\\__первая__ и \\\\__вторая__ подряд", // 2  прогон K03
+        )
+
+        assertEquals(emptyList(), src.scan().spans)
+    }
+
+    @Test
+    fun TC_22_realPairsAroundAnEscapedOneStillWork() {
+        val src = Source(
+            "\\\\__экранировано__ и __настоящая пара__ тут", // 0  прогон K04
+            "", // 1
+            "\\\\__экранировано__ а потом _одиночный курсив_ тут", // 2  прогон K07
+            "", // 3
+            "\\\\**жирная пара** после **настоящая** тут", // 4  прогон K06
+        )
+
+        // Экранированная конструкция съедена, соседние пары — и unconstrained,
+        // и constrained, и другой знак — работают как без неё.
+        assertEquals(
+            listOf(
+                AdocSpan(src.inLine(0, 21, 39), AdocStyle.Italic),
+                AdocSpan(src.inLine(2, 27, 45), AdocStyle.Italic),
+                AdocSpan(src.inLine(4, 24, 37), AdocStyle.Bold),
+            ),
+            src.scan().spans,
+        )
+    }
+
+    @Test
     fun TC_23_rangesAreCountedOverTheSourceText() {
         val src = Source("\\*нет* и *да*")
 

@@ -153,20 +153,28 @@ internal object AdocInlineScanner {
                 continue
             }
             if (backslashesBefore(text, i) >= DOUBLED_ESCAPE) {
-                i += 2
+                // Экранированная конструкция съедается ЦЕЛИКОМ, вместе со своей
+                // закрывающей парой, — как съедает её регулярное выражение
+                // эталона. Пропуск одного лишь открытия оставлял бы закрывающую
+                // пару свободной, и она сцеплялась бы накрест с открывающей
+                // следующей конструкции — дефект, найденный сверкой `SL-6` на
+                // `\\__экранировано__, а \__не экранировано__` и снятый
+                // прогоном эталона 2026-08-17 (`SL-7`). Знаки гасятся, чтобы
+                // constrained-проход того же знака не подобрал их заново
+                // (прогон K06: `\\**жирная пара**` целиком литеральна);
+                // содержимое остаётся свободным для конструкций других знаков.
+                val escapedClose = closingPair(text, mark, openAt = i, consumed)
+                if (escapedClose >= 0) {
+                    consume(consumed, i, i + 2)
+                    consume(consumed, escapedClose, escapedClose + 2)
+                    i = escapedClose + 2
+                } else {
+                    i += 2
+                }
                 continue
             }
 
-            // Закрывающая пара — ближайшая, содержимое минимум один символ.
-            var close = -1
-            var j = i + 4
-            while (j < last + 1) {
-                if (text[j - 1] == mark && text[j] == mark && !consumed[j - 1] && !consumed[j]) {
-                    close = j - 1
-                    break
-                }
-                j++
-            }
+            val close = closingPair(text, mark, openAt = i, consumed)
             if (close < 0) {
                 i += 2
                 continue
@@ -504,6 +512,22 @@ internal object AdocInlineScanner {
             i--
         }
         return count
+    }
+
+    /**
+     * Ближайшая закрывающая пара знаков [mark] для открытия в [openAt]:
+     * содержимое минимум один символ, оба знака не заняты более ранним
+     * проходом. Возвращает индекс первого знака пары или -1.
+     */
+    private fun closingPair(text: String, mark: Char, openAt: Int, consumed: BooleanArray): Int {
+        var j = openAt + 4
+        while (j < text.length) {
+            if (text[j - 1] == mark && text[j] == mark && !consumed[j - 1] && !consumed[j]) {
+                return j - 1
+            }
+            j++
+        }
+        return -1
     }
 
     /** Пускает ли символ перед знаком constrained-пару. Начало строки пускает. */

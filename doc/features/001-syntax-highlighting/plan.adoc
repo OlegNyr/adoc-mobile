@@ -1,7 +1,7 @@
 = План работ — подсветка синтаксиса
 :feature: 001-syntax-highlighting
 // plan-status: draft | active | done
-:plan-status: active
+:plan-status: done
 :updated: 2026-08-17
 :horizon: детально спланирован этап E1; E2 — одной строкой, уточняется после закрытия E1
 :toc: macro
@@ -114,7 +114,7 @@ toc::[]
 | Фикс экранированной unconstrained-пары: `\__…__` не сцепляется накрест со следующей парой — дефект, найденный сверкой с корпусом
 | запись реестра сверки становится мёртвой и удаляется
 | SL-6
-| {st-wip}
+| {st-done}
 |===
 
 Статусы: {st-todo} · {st-wip} · {st-done} (запись — в `progress.adoc`) · {st-hold} · {st-drop}

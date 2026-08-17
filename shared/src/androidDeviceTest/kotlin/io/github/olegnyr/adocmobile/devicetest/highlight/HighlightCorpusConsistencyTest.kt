@@ -73,15 +73,9 @@ class HighlightCorpusConsistencyTest {
             probeContains = "цитата",
             reason = "FR-23/TC-27: типографские кавычки — не-цель; «\"`цитата`\"» размечается моноширинным, эталон отдаёт кавычки",
         ),
-        Known(
-            stem = "02-inline-formatting",
-            direction = Direction.ReferenceToScanner,
-            tag = "em",
-            probeContains = "не экранировано",
-            reason = "ДЕФЕКТ сканера, найден сверкой: экранированная unconstrained-пара `\\\\__…__` не съедает свой закрывающий знак, " +
-                "и он сцепляется с открывающим следующей пары накрест; эталон съедает конструкцию целиком. " +
-                "Правка — в highlight/ (закрыт для слайса), решение владельцу",
-        ),
+        // Запись про em «не экранировано» в 02-inline-formatting удалена в SL-7:
+        // дефект сцепления экранированной unconstrained-пары починен, сверка
+        // показала запись мёртвой — ровно так реестр и должен работать.
         Known(
             stem = "02-inline-formatting",
             direction = Direction.ReferenceToScanner,
