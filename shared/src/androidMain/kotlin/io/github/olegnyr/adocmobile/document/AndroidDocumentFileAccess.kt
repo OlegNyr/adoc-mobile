@@ -92,6 +92,35 @@ class AndroidDocumentFileAccess(context: Context) : DocumentFileAccess {
         }
     }
 
+    override suspend fun write(source: DocumentSource, fileText: String): DocumentWriteResult =
+        withContext(Dispatchers.IO) {
+            val uri = Uri.parse(source.id)
+
+            // Предпроверка права — по той же причине, что в [open]: потеря
+            // доступа — штатный исход с точным именем, а не разбор исключения.
+            // Проверяется именно запись: провайдер мог выдать только чтение
+            // (см. [takePersistableAccess]), и тогда документ открывается, но
+            // сохранить его нельзя — ровно случай `FR-17`.
+            if (!holdsWritePermission(uri)) {
+                return@withContext DocumentWriteResult.Failed(source, DocumentWriteError.PermissionLost)
+            }
+
+            try {
+                // Режим "wt" — запись с усечением. Именно "wt", а не "w": для
+                // части провайдеров "w" не усекает файл, и текст короче
+                // прежнего оставил бы в файле хвост старого содержимого —
+                // молчаливая порча, которую не увидит ни один наш тест.
+                // Запись идёт напрямую в файл пользователя: без временного
+                // файла и замены — решение `FR-20`, цена записана в спеке.
+                val stream = resolver.openOutputStream(uri, "wt")
+                    ?: return@withContext DocumentWriteResult.Failed(source, DocumentWriteError.NotFound)
+                stream.use { it.write(fileText.encodeToByteArray()) }
+                DocumentWriteResult.Written
+            } catch (failure: Exception) {
+                DocumentWriteResult.Failed(source, failure.toDocumentWriteError())
+            }
+        }
+
     /**
      * Запомненный источник — независимо от того, действует ли ещё разрешение.
      *
@@ -150,6 +179,9 @@ class AndroidDocumentFileAccess(context: Context) : DocumentFileAccess {
     private fun holdsPermission(uri: Uri): Boolean =
         resolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
 
+    private fun holdsWritePermission(uri: Uri): Boolean =
+        resolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
+
     private fun displayNameOf(uri: Uri): String {
         val queried = runCatching {
             resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
@@ -183,3 +215,38 @@ internal fun Throwable.toDocumentAccessError(): DocumentAccessError = when (this
     is IOException -> DocumentAccessError.ReadFailed
     else -> DocumentAccessError.ReadFailed
 }
+
+/**
+ * Исключение записи — в классифицированный отказ (`FR-17`).
+ *
+ * Порядок ветвей содержательный, как у [toDocumentAccessError]:
+ * [FileNotFoundException] — наследник [IOException].
+ *
+ * «Нет места» распознаётся по `errno` в цепочке причин: провайдер заворачивает
+ * `ErrnoException(ENOSPC)` в [IOException], и по типу верхнего исключения
+ * исход не отличим от любой другой ошибки ввода-вывода. Распознавание — по
+ * лучшей доступной примете, а не гарантия: провайдер, потерявший `errno`,
+ * честно даст общий [DocumentWriteError.WriteFailed].
+ */
+internal fun Throwable.toDocumentWriteError(): DocumentWriteError = when {
+    this is SecurityException -> DocumentWriteError.PermissionLost
+    this is FileNotFoundException -> DocumentWriteError.NotFound
+    isNoSpace() -> DocumentWriteError.NoSpace
+    else -> DocumentWriteError.WriteFailed
+}
+
+private fun Throwable.isNoSpace(): Boolean {
+    var failure: Throwable? = this
+    var hops = 0
+    while (failure != null && hops < CAUSE_CHAIN_LIMIT) {
+        if (failure is android.system.ErrnoException && failure.errno == android.system.OsConstants.ENOSPC) {
+            return true
+        }
+        failure = failure.cause
+        hops++
+    }
+    return false
+}
+
+/** Страховка от цикла в цепочке причин: исключения умеют ссылаться друг на друга. */
+private const val CAUSE_CHAIN_LIMIT = 8
