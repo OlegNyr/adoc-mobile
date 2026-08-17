@@ -16,12 +16,15 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,8 +66,11 @@ import io.github.olegnyr.adocmobile.theme.adocTextStyle
  * касанием, поэтому клавиатура остаётся открытой и набор продолжается в
  * позиции каретки из заготовки (`FR-12`).
  *
- * Вставку несёт весь базовый ряд (`SL-2`, решения `OQ-2` и `OQ-5`); одна
- * кнопка без действия — раскрытие `›`, его подключает `SL-3` (`OQ-1`).
+ * Раскрытие `›` — *замещение ряда* (решение `OQ-1`): касание заменяет базовый
+ * ряд кнопками таблицы, admonition и блока кода, первой кнопкой встаёт `‹`
+ * (возврат); высота панели не растёт. Признак раскрытия — единственное
+ * собственное состояние панели, `rememberSaveable` переживает поворот
+ * (`NFR-5`).
  *
  * @param state единственный `TextFieldState` экрана (`FR-6`) — тот же
  * экземпляр, что у полотна редактора; своего состояния текста панель не
@@ -72,6 +78,9 @@ import io.github.olegnyr.adocmobile.theme.adocTextStyle
  */
 @Composable
 fun InsertPanel(state: TextFieldState, modifier: Modifier = Modifier) {
+    // Признак «ряд замещён» (OQ-1): переживает поворот, NFR-5.
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
     Column(modifier = modifier.fillMaxWidth()) {
         // Верхняя граница панели — как в бандле: 1 px цветом границы хрома.
         Box(
@@ -90,73 +99,124 @@ fun InsertPanel(state: TextFieldState, modifier: Modifier = Modifier) {
                 // max(навигация, клавиатура), без двойного зазора.
                 .navigationBarsPadding()
                 .imePadding()
-                .horizontalScroll(rememberScrollState())
+                // Своя прокрутка на каждый состав ряда: раскрытый ряд короче,
+                // и унаследованное смещение оставило бы его сдвинутым.
+                .horizontalScroll(remember(expanded) { ScrollState(0) })
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            PanelButton(
-                label = "=",
-                description = "Заголовок документа",
-                labelColor = AdocTheme.colors.accentText,
-                onTap = { state.applyInsert(InsertConstructs.documentTitle) },
-            )
-            PanelButton(
-                label = "==",
-                description = "Заголовок раздела",
-                labelColor = AdocTheme.colors.accentText,
-                onTap = { state.applyInsert(InsertConstructs.sectionTitle) },
-            )
-            PanelButton(
-                label = "*B*",
-                description = "Полужирный",
-                labelColor = AdocTheme.colors.textSecondary,
-                fontWeight = FontWeight.Bold,
-                onTap = { state.applyInsert(InsertConstructs.bold) },
-            )
-            PanelButton(
-                label = "_I_",
-                description = "Курсив",
-                labelColor = AdocTheme.colors.textSecondary,
-                fontStyle = FontStyle.Italic,
-                onTap = { state.applyInsert(InsertConstructs.italic) },
-            )
-            PanelButton(
-                label = "`c`",
-                description = "Моноширинный",
-                labelColor = AdocTheme.colors.textSecondary,
-                onTap = { state.applyInsert(InsertConstructs.monospace) },
-            )
-            PanelButton(
-                label = "*",
-                description = "Маркер списка",
-                labelColor = AdocTheme.colors.textSecondary,
-                onTap = { state.applyInsert(InsertConstructs.listItem) },
-            )
-            PanelButton(
-                label = "link",
-                description = "Ссылка",
-                labelColor = AdocTheme.colors.textSecondary,
-                fontSize = 12.sp,
-                onTap = { state.applyInsert(InsertConstructs.link) },
-            )
-            PanelButton(
-                label = "img",
-                description = "Изображение",
-                labelColor = AdocTheme.colors.textSecondary,
-                fontSize = 12.sp,
-                onTap = { state.applyInsert(InsertConstructs.image) },
-            )
-            // Раскрытие дополнительных конструкций — SL-3 (OQ-1).
-            PanelButton(
-                label = "›",
-                description = "Дополнительные конструкции",
-                labelColor = AdocTheme.colors.textFaint,
-                fontSize = 12.sp,
-                minWidth = 30.dp,
-                onTap = null,
-            )
+            if (expanded) {
+                ExpandedRow(state = state, onCollapse = { expanded = false })
+            } else {
+                BaseRow(state = state, onExpand = { expanded = true })
+            }
         }
     }
+}
+
+/**
+ * Раскрытый ряд (`FR-11`): возврат `‹` первой кнопкой, затем таблица,
+ * admonition и блок кода. Подписи — фрагменты синтаксиса конструкций в языке
+ * базового ряда; в макете раскрытие не нарисовано (`OQ-1` решал механику,
+ * не подписи), выбор подписей — на сверку дизайнеру.
+ */
+@Composable
+private fun ExpandedRow(state: TextFieldState, onCollapse: () -> Unit) {
+    PanelButton(
+        label = "‹",
+        description = "Основные конструкции",
+        labelColor = AdocTheme.colors.textFaint,
+        fontSize = 12.sp,
+        minWidth = 30.dp,
+        onTap = onCollapse,
+    )
+    PanelButton(
+        label = "|===",
+        description = "Таблица",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontSize = 12.sp,
+        onTap = { state.applyInsert(InsertConstructs.table) },
+    )
+    PanelButton(
+        label = "NOTE",
+        description = "Примечание",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontSize = 12.sp,
+        onTap = { state.applyInsert(InsertConstructs.admonition) },
+    )
+    PanelButton(
+        label = "----",
+        description = "Блок кода",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontSize = 12.sp,
+        onTap = { state.applyInsert(InsertConstructs.listing) },
+    )
+}
+
+/** Базовый ряд по макету «02» (`FR-3`); вставку несут все кнопки (`SL-2`). */
+@Composable
+private fun BaseRow(state: TextFieldState, onExpand: () -> Unit) {
+    PanelButton(
+        label = "=",
+        description = "Заголовок документа",
+        labelColor = AdocTheme.colors.accentText,
+        onTap = { state.applyInsert(InsertConstructs.documentTitle) },
+    )
+    PanelButton(
+        label = "==",
+        description = "Заголовок раздела",
+        labelColor = AdocTheme.colors.accentText,
+        onTap = { state.applyInsert(InsertConstructs.sectionTitle) },
+    )
+    PanelButton(
+        label = "*B*",
+        description = "Полужирный",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontWeight = FontWeight.Bold,
+        onTap = { state.applyInsert(InsertConstructs.bold) },
+    )
+    PanelButton(
+        label = "_I_",
+        description = "Курсив",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontStyle = FontStyle.Italic,
+        onTap = { state.applyInsert(InsertConstructs.italic) },
+    )
+    PanelButton(
+        label = "`c`",
+        description = "Моноширинный",
+        labelColor = AdocTheme.colors.textSecondary,
+        onTap = { state.applyInsert(InsertConstructs.monospace) },
+    )
+    PanelButton(
+        label = "*",
+        description = "Маркер списка",
+        labelColor = AdocTheme.colors.textSecondary,
+        onTap = { state.applyInsert(InsertConstructs.listItem) },
+    )
+    PanelButton(
+        label = "link",
+        description = "Ссылка",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontSize = 12.sp,
+        onTap = { state.applyInsert(InsertConstructs.link) },
+    )
+    PanelButton(
+        label = "img",
+        description = "Изображение",
+        labelColor = AdocTheme.colors.textSecondary,
+        fontSize = 12.sp,
+        onTap = { state.applyInsert(InsertConstructs.image) },
+    )
+    // Раскрытие дополнительных конструкций — замещение ряда (OQ-1).
+    PanelButton(
+        label = "›",
+        description = "Дополнительные конструкции",
+        labelColor = AdocTheme.colors.textFaint,
+        fontSize = 12.sp,
+        minWidth = 30.dp,
+        onTap = onExpand,
+    )
 }
 
 /**
@@ -172,10 +232,6 @@ fun InsertPanel(state: TextFieldState, modifier: Modifier = Modifier) {
  *
  * У кнопки — русское семантическое описание конструкции, а не только глиф
  * (`NFR-9`): скринридер читает [description].
- *
- * @param onTap обработчик касания или `null`, пока конструкцию не подключил
- * свой слайс: кнопка нарисована по макету, но не кликабельна и не объявляет
- * себя кнопкой скринридеру — мёртвая кнопка хуже отсутствующей.
  */
 @Composable
 private fun PanelButton(
@@ -186,22 +242,11 @@ private fun PanelButton(
     minWidth: Dp = 44.dp,
     fontWeight: FontWeight? = null,
     fontStyle: FontStyle? = null,
-    onTap: (() -> Unit)?,
+    onTap: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val fill = if (pressed) AdocTheme.colors.pressed else Color.Transparent
-
-    val clickModifier = if (onTap != null) {
-        Modifier.clickable(
-            interactionSource = interaction,
-            indication = null,
-            role = Role.Button,
-            onClick = onTap,
-        )
-    } else {
-        Modifier
-    }
 
     Box(
         modifier = Modifier
@@ -209,7 +254,12 @@ private fun PanelButton(
             .height(38.dp)
             .background(fill)
             .border(1.dp, AdocTheme.colors.borderObject)
-            .then(clickModifier)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = onTap,
+            )
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {

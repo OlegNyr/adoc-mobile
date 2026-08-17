@@ -289,6 +289,98 @@ class InsertApplierTest {
     }
 
     /**
+     * `TC-7`, `FR-11`: таблица из раскрытия — блочная заготовка с
+     * ограничителями на отдельных строках, каретка в первой ячейке.
+     * В конце непустой строки перед заготовкой добавляется перевод строки.
+     */
+    @Test
+    fun TC_7_tableTemplateInsertsBlockWithCaretInFirstCell() {
+        val state = TextFieldState("абв", initialSelection = TextRange(3))
+
+        state.applyInsert(InsertConstructs.table)
+
+        assertEquals("абв\n|===\n| \n|===", state.text.toString())
+        assertEquals(
+            TextRange(11),
+            state.selection,
+            "Каретка обязана встать в первую ячейку — сразу за «| » (TC-7).",
+        )
+    }
+
+    /** `TC-7`: в середине непустой строки хвост уезжает на свою строку — ограничители остаются одни на строке. */
+    @Test
+    fun TC_7_tableInMiddleOfLineSeparatesWithNewlinesBothSides() {
+        val state = TextFieldState("абвгде", initialSelection = TextRange(3))
+
+        state.applyInsert(InsertConstructs.table)
+
+        assertEquals("абв\n|===\n| \n|===\nгде", state.text.toString())
+        assertEquals(TextRange(11), state.selection)
+    }
+
+    /**
+     * `TC-7`, дорешённый `OQ-5`: admonition — абзацная форма `NOTE: текст`,
+     * русский заместитель выделен — печать заменяет его сразу.
+     */
+    @Test
+    fun TC_7_admonitionParagraphWithSelectedPlaceholder() {
+        val state = TextFieldState("", initialSelection = TextRange(0))
+
+        state.applyInsert(InsertConstructs.admonition)
+
+        assertEquals("NOTE: текст", state.text.toString())
+        assertEquals(
+            TextRange(6, 11),
+            state.selection,
+            "Заместитель «текст» обязан быть выделен, как у link/img (OQ-5).",
+        )
+    }
+
+    /** `TC-7`: выделение встаёт на место заместителя admonition, каретка за вставленным текстом. */
+    @Test
+    fun TC_7_admonitionWrapsSelectionAsItsText() {
+        val state = TextFieldState("важно тут", initialSelection = TextRange(0, 5))
+
+        state.applyInsert(InsertConstructs.admonition)
+
+        assertEquals("NOTE: важно\n тут", state.text.toString())
+        assertEquals(TextRange(11), state.selection)
+    }
+
+    /**
+     * `TC-7`: блок кода — `[source]` и пара `----` по форме из таблицы
+     * заготовок, каретка на пустой строке между ограничителями.
+     */
+    @Test
+    fun TC_7_listingTemplateInsertsFencesWithCaretBetween() {
+        val state = TextFieldState("", initialSelection = TextRange(0))
+
+        state.applyInsert(InsertConstructs.listing)
+
+        assertEquals("[source]\n----\n\n----", state.text.toString())
+        assertEquals(TextRange(14), state.selection)
+    }
+
+    /** `TC-3`, `FR-9` для блочных заготовок: таблица из раскрытия — один шаг отмены. */
+    @Test
+    fun TC_3_blockTemplateUndoesInOneStep() {
+        val source = DocumentSource(id = "content://doc/1", displayName = "notes.adoc")
+        val editor = DocumentEditor().apply { load(DocumentState.opened(source, "")) }
+        editor.textFieldState.edit {
+            insert(0, "абв")
+            selection = TextRange(3)
+        }
+
+        editor.textFieldState.applyInsert(InsertConstructs.table)
+        assertEquals("абв\n|===\n| \n|===", editor.textFieldState.text.toString())
+
+        editor.undo()
+        assertEquals("абв", editor.textFieldState.text.toString(), "вся заготовка обязана сняться одним undo")
+        editor.redo()
+        assertEquals("абв\n|===\n| \n|===", editor.textFieldState.text.toString())
+    }
+
+    /**
      * `TC-3`, `FR-9` для строчных конструкций: маркер на каждую строку
      * выделения — три вставки, но один шаг отмены (решение `OQ-2`: «всё — один
      * шаг отмены»).

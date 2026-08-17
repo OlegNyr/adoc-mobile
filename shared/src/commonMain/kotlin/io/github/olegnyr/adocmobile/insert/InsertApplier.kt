@@ -50,6 +50,7 @@ fun insertEditFor(
         is InlineWrap -> inlineWrapEdit(construct, text, start, end)
         is LinePrefix -> linePrefixEdit(construct, text, start, end)
         is MacroTemplate -> macroTemplateEdit(construct, text, start, end)
+        is BlockTemplate -> blockTemplateEdit(construct, text, start, end)
     }
 }
 
@@ -186,6 +187,37 @@ private fun macroTemplateEdit(construct: MacroTemplate, text: CharSequence, star
     } else {
         val from = start + head.length + target.length + 1
         from to from + construct.attributePlaceholder.length
+    }
+    return InsertEdit(
+        rangeStart = start,
+        rangeEnd = end,
+        replacement = replacement,
+        selectionStart = selectionStart,
+        selectionEnd = selectionEnd,
+    )
+}
+
+/**
+ * Блочная заготовка раскрытия `›` (`FR-11`, `TC-7`).
+ *
+ * Слот между [BlockTemplate.before] и [BlockTemplate.after]: пустое выделение
+ * получает выделенный заместитель (или каретку при пустом), непустое встаёт в
+ * слот с кареткой за собой. Переводы строк вокруг — те же правила, что у
+ * блочной `image::` в [macroTemplateEdit].
+ */
+private fun blockTemplateEdit(construct: BlockTemplate, text: CharSequence, start: Int, end: Int): InsertEdit {
+    val slot = if (start == end) construct.placeholder else text.substring(start, end)
+    val leading = if (start > lineStartOf(text, start)) "\n" else ""
+    val trailing = if (end < text.length && text[end] != '\n') "\n" else ""
+
+    val head = leading + construct.before
+    val replacement = head + slot + construct.after + trailing
+
+    val (selectionStart, selectionEnd) = if (start == end) {
+        start + head.length to start + head.length + construct.placeholder.length
+    } else {
+        val caret = start + head.length + slot.length
+        caret to caret
     }
     return InsertEdit(
         rangeStart = start,
