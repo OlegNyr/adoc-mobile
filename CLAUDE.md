@@ -21,7 +21,7 @@ Every one of these produced a build failure during scaffolding, and none matches
 - **Do not apply `org.jetbrains.kotlin.android`** — Kotlin is built into AGP 9; applying it fails the build.
 - **`com.android.library` is incompatible with the KMP plugin.** A KMP module uses `com.android.kotlin.multiplatform.library`, configured inside `kotlin { android { … } }` — there is no top-level `android { }` block, and `androidLibrary { }` is already deprecated in favour of `android { }`.
 - **`kotlinOptions` does not exist** in the new DSL. Use `compileOptions` for Java level, and `compilerOptions { }` (a lambda, not `.configure { }`) inside `kotlin { android { } }`.
-- **Tests are off by default** in the KMP library plugin. Without `withHostTestBuilder {}.configure {}` the `commonTest` source set silently compiles to nothing.
+- **Things are off by default in the KMP library plugin, and each one fails silently.** Tests need `withHostTestBuilder {}.configure {}` or `commonTest` compiles to nothing. Android resources need `androidResources { enable = true }` or `composeResources` never reach the APK — the build stays green, tests pass, and the app quietly falls back to system fonts. Assume any capability the old `com.android.library` gave for free is now opt-in, and verify the *artifact*, not the build log.
 - **`compose.material3` and friends are deprecated shortcuts.** `material3` ships on its own version line (1.9.0) behind runtime/foundation/ui (1.11.1), so coordinates are spelled out in the catalog.
 
 ## Current state

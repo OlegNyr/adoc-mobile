@@ -1,0 +1,46 @@
+= Шрифты: происхождение и лицензии
+:revdate: 2026-08-17
+:sectanchors:
+
+Все три гарнитуры распространяются по SIL Open Font License 1.1.
+Лицензия допускает встраивание в приложение и требует, чтобы её текст сопровождал файлы — тексты лежат в этом каталоге.
+
+Файлы скачаны 2026-08-17 и лежат в `shared/src/commonMain/composeResources/font/`.
+
+[cols="2,2,3", options="header"]
+|===
+| Гарнитура | Файл в проекте | Источник
+
+| Barlow Regular
+| `barlow_regular.ttf`
+| `google/fonts`, `ofl/barlow/Barlow-Regular.ttf`
+
+| Barlow Medium
+| `barlow_medium.ttf`
+| `google/fonts`, `ofl/barlow/Barlow-Medium.ttf`
+
+| Barlow Condensed SemiBold
+| `barlow_condensed_semibold.ttf`
+| `google/fonts`, `ofl/barlowcondensed/BarlowCondensed-SemiBold.ttf`
+
+| JetBrains Mono Regular
+| `jetbrains_mono_regular.ttf`
+| `JetBrains/JetBrainsMono`, `fonts/ttf/JetBrainsMono-Regular.ttf`
+
+| JetBrains Mono Medium
+| `jetbrains_mono_medium.ttf`
+| `JetBrains/JetBrainsMono`, `fonts/ttf/JetBrainsMono-Medium.ttf`
+
+| JetBrains Mono Bold
+| `jetbrains_mono_bold.ttf`
+| `JetBrains/JetBrainsMono`, `fonts/ttf/JetBrainsMono-Bold.ttf`
+|===
+
+[NOTE]
+====
+JetBrains Mono взят из репозитория JetBrains, а не из `google/fonts`: там гарнитура опубликована только вариативным файлом `JetBrainsMono[wght].ttf`, а дизайн требует три конкретных начертания — 400, 500 и 700.
+Статические файлы проще и предсказуемее в раскладке текста.
+====
+
+Состав начертаний выведен из таблицы «Типографика» xref:../../../doc/design/design.adoc[описания дизайна]: Barlow Condensed 600 для заголовков и подписей кнопок, Barlow 400 и 500 для текста, JetBrains Mono 400, 500 и 700 для кода и служебных меток.
+Начертания, не перечисленные там, не встраиваются: каждый файл — это вес в APK.

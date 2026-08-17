@@ -15,7 +15,7 @@ plugins {
  * доступа к исходникам. Область — production-код; тесты исключены намеренно,
  * они обязаны содержать ожидаемые значения, иначе им нечего сверять.
  */
-val verifyNoColorLiterals by tasks.registering {
+val verifyNoColorLiterals = tasks.register("verifyNoColorLiterals") {
     group = "verification"
     description = "Литералы цвета вне файла определения палитры"
 
@@ -51,7 +51,83 @@ val verifyNoColorLiterals by tasks.registering {
     }
 }
 
-tasks.named("check") { dependsOn(verifyNoColorLiterals) }
+/**
+ * TC-9 фичи 002-design-system: тексты лицензий сопровождают файлы шрифтов.
+ *
+ * Проверка автоматическая намеренно: SIL OFL требует прикладывать лицензию, и
+ * это обязательство не должно держаться на памяти разработчика.
+ */
+val verifyFontLicenses = tasks.register("verifyFontLicenses") {
+    group = "verification"
+    description = "Лицензии и происхождение встроенных шрифтов"
+
+    val fontsDir = layout.projectDirectory.dir("src/commonMain/composeResources/font")
+    val licensesDir = layout.projectDirectory.dir("licenses/fonts")
+    inputs.dir(fontsDir).withPropertyName("fonts")
+    inputs.dir(licensesDir).withPropertyName("licenses")
+
+    doLast {
+        val fonts = fontsDir.asFile.listFiles { f -> f.extension == "ttf" }?.toList().orEmpty()
+        check(fonts.isNotEmpty()) { "Шрифты не найдены в ${fontsDir.asFile}" }
+
+        val licenseTexts = licensesDir.asFile.listFiles { f -> f.name.startsWith("OFL") }?.toList().orEmpty()
+        check(licenseTexts.isNotEmpty()) {
+            "Нет ни одного текста лицензии в ${licensesDir.asFile}, а шрифты встроены (TC-9)"
+        }
+
+        val sources = licensesDir.asFile.resolve("SOURCES.adoc")
+        check(sources.isFile) { "Нет ${sources}: для каждой гарнитуры должен быть указан источник (TC-9)" }
+
+        val sourcesText = sources.readText()
+        val undocumented = fonts.map { it.name }.filterNot { sourcesText.contains(it) }
+        check(undocumented.isEmpty()) {
+            "Шрифты без указания источника в SOURCES.adoc (TC-9): ${undocumented.joinToString()}"
+        }
+    }
+}
+
+/**
+ * TC-4 фичи 002-design-system, первое звено цепочки «объявление → файл → APK».
+ *
+ * `AdocFonts` перечисляет файлы шрифтов, из которых собираются семейства. Если
+ * объявление разойдётся с содержимым каталога ресурсов, Compose не найдёт
+ * ресурс — но узнается это на устройстве, а не на сборке. Здесь списки
+ * сверяются в обе стороны: объявленное без файла и файл без объявления одинаково
+ * валят прогон (второе означает вес в APK, который никто не рисует).
+ */
+val verifyFontDeclarations = tasks.register("verifyFontDeclarations") {
+    group = "verification"
+    description = "Объявления шрифтов совпадают с каталогом ресурсов"
+
+    val fontsDir = layout.projectDirectory.dir("src/commonMain/composeResources/font")
+    val declarations = layout.projectDirectory
+        .file("src/commonMain/kotlin/io/github/olegnyr/adocmobile/theme/AdocFonts.kt")
+    inputs.dir(fontsDir).withPropertyName("fonts")
+    inputs.file(declarations).withPropertyName("declarations")
+
+    doLast {
+        val declared = Regex("""\"([a-z0-9_]+\.ttf)\"""")
+            .findAll(declarations.asFile.readText())
+            .map { it.groupValues[1] }
+            .toSortedSet()
+        check(declared.isNotEmpty()) { "В ${declarations.asFile.name} не найдено ни одного объявленного шрифта" }
+
+        val present = fontsDir.asFile.listFiles { f -> f.extension == "ttf" }
+            ?.map { it.name }?.toSortedSet().orEmpty().toSortedSet()
+
+        val missing = declared - present
+        val unused = present - declared
+        check(missing.isEmpty() && unused.isEmpty()) {
+            buildString {
+                append("Объявления шрифтов разошлись с каталогом ресурсов (TC-4):")
+                if (missing.isNotEmpty()) append("\n  объявлены, но файлов нет: ${missing.joinToString()}")
+                if (unused.isNotEmpty()) append("\n  файлы есть, но не объявлены: ${unused.joinToString()}")
+            }
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyNoColorLiterals, verifyFontLicenses, verifyFontDeclarations) }
 
 kotlin {
     // Блок называется android, а не androidLibrary: последний уже помечен устаревшим.
@@ -63,6 +139,13 @@ kotlin {
         // Тесты в новом плагине по умолчанию выключены и включаются явно.
         // Без этого commonTest не во что компилировать на Android.
         withHostTestBuilder {}.configure {}
+
+        // Ресурсы Android в новом плагине тоже выключены по умолчанию.
+        // Без этого шрифты из composeResources не попадают в APK, и приложение
+        // молча рисует системным шрифтом.
+        androidResources {
+            enable = true
+        }
 
         compilerOptions {
             jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
@@ -80,6 +163,7 @@ kotlin {
             api(libs.compose.foundation)
             api(libs.compose.material3)
             api(libs.compose.ui)
+            api(libs.compose.components.resources)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

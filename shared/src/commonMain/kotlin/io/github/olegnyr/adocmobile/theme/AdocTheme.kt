@@ -4,11 +4,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 
 /**
@@ -76,6 +78,52 @@ object AdocTheme {
         outline = colors.borderObject,
         outlineVariant = colors.borderList,
     )
+
+    /**
+     * Отображение гарнитур и стилей проекта на слоты типографики Material.
+     *
+     * Нужно по той же причине, что и [materialScheme]: без него `MaterialTheme`
+     * раздаёт слоты со шрифтом системы, и компонент Material оказывается набран
+     * Roboto на экране, где всё остальное — Barlow.
+     *
+     * Правило отображения:
+     *
+     * * слоту, у которого есть прямое соответствие в описании дизайна,
+     *   присваиваются его метрики целиком;
+     * * остальным меняется только гарнитура, а кегль и начертание остаются
+     *   умолчаниями Material — придумывать для них значения запрещено границами
+     *   работ, а оставить их со шрифтом системы нельзя.
+     *
+     * Функция принимает гарнитуры параметром, а не читает их из композиции:
+     * так она проверяется обычным тестом, как и [materialScheme].
+     */
+    fun materialTypography(families: AdocFontFamilies): Typography {
+        val default = Typography()
+        fun TextStyle.inFamily(role: AdocFontRole): TextStyle = copy(fontFamily = families[role])
+        fun styleOf(metrics: AdocTextMetrics): TextStyle = metrics.toTextStyle(families[metrics.family])
+
+        return default.copy(
+            displayLarge = default.displayLarge.inFamily(AdocFontRole.Heading),
+            displayMedium = default.displayMedium.inFamily(AdocFontRole.Heading),
+            displaySmall = default.displaySmall.inFamily(AdocFontRole.Heading),
+
+            headlineLarge = default.headlineLarge.inFamily(AdocFontRole.Heading),
+            headlineMedium = styleOf(AdocTypography.previewTitle),
+            headlineSmall = default.headlineSmall.inFamily(AdocFontRole.Heading),
+
+            titleLarge = styleOf(AdocTypography.screenTitle),
+            titleMedium = default.titleMedium.inFamily(AdocFontRole.Heading),
+            titleSmall = default.titleSmall.inFamily(AdocFontRole.Heading),
+
+            bodyLarge = styleOf(AdocTypography.body),
+            bodyMedium = styleOf(AdocTypography.body),
+            bodySmall = default.bodySmall.inFamily(AdocFontRole.Body),
+
+            labelLarge = styleOf(AdocTypography.buttonLabel),
+            labelMedium = styleOf(AdocTypography.metadata),
+            labelSmall = styleOf(AdocTypography.sectionLabel),
+        )
+    }
 }
 
 /** Роли палитры внутри композиции. Значение по умолчанию — тёмная схема. */
@@ -91,10 +139,15 @@ fun AdocTheme(
     colors: AdocColors = AdocTheme.defaultColors,
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalAdocColors provides colors) {
+    val families = rememberAdocFontFamilies()
+    CompositionLocalProvider(
+        LocalAdocColors provides colors,
+        LocalAdocFontFamilies provides families,
+    ) {
         MaterialTheme(
             colorScheme = AdocTheme.materialScheme(colors),
             shapes = AdocTheme.shapes,
+            typography = AdocTheme.materialTypography(families),
             content = content,
         )
     }
