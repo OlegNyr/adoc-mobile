@@ -1,7 +1,7 @@
 = План работ — документ и файлы
 :feature: 004-document-and-files
 // plan-status: draft | active | done
-:plan-status: draft
+:plan-status: active
 :updated: 2026-08-17
 :horizon: детально спланирован этап E1; E2 уточняется после закрытия E1
 :toc: macro
