@@ -127,7 +127,121 @@ val verifyFontDeclarations = tasks.register("verifyFontDeclarations") {
     }
 }
 
-tasks.named("check") { dependsOn(verifyNoColorLiterals, verifyFontLicenses, verifyFontDeclarations) }
+/**
+ * Каталоги, в которых легально живёт код подсветки, и способы его опознать.
+ *
+ * Опознание идёт двумя признаками сразу — по пути и по объявлению пакета.
+ * Одного пути мало: файл, положенный в androidMain под другим каталогом, но с
+ * пакетом фичи, проверку бы обошёл.
+ */
+val highlightPackage = "io.github.olegnyr.adocmobile.highlight"
+val highlightAllowedRoots = listOf(
+    "shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/highlight",
+    "shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/highlight",
+)
+val highlightSearchRoots = files(rootDir.resolve("shared/src"), rootDir.resolve("androidApp/src"))
+
+/** Все файлы фичи подсветки, где бы они ни лежали. */
+fun highlightSources(): List<File> = highlightSearchRoots.asFileTree
+    .matching { include("**/*.kt") }
+    .filter { file ->
+        val path = file.invariantSeparatorsPath
+        path.contains("/adocmobile/highlight/") || file.readText().contains("package $highlightPackage")
+    }
+    .toList()
+
+/**
+ * TC-40 фичи 001-syntax-highlighting: код фичи целиком в `commonMain`/`commonTest`.
+ *
+ * Нефункциональное требование «платформенного кода в этой фиче быть не должно
+ * вовсе» проверяемо только составом файлов, а состава файлов тест из commonTest
+ * не видит. Отсюда задача сборки — тем же приёмом, что verifyNoColorLiterals.
+ *
+ * Проверка двусторонняя. Файл фичи за пределами общих исходников валит прогон —
+ * это прямое нарушение. Пустой результат валит прогон тоже: молча зеленеющая
+ * проверка, которая перестала что-либо находить (переименовали пакет, перенесли
+ * каталог), хуже отсутствующей.
+ */
+val verifyHighlightIsCommonOnly = tasks.register("verifyHighlightIsCommonOnly") {
+    group = "verification"
+    description = "Код подсветки не покидает commonMain и commonTest"
+
+    inputs.files(highlightSearchRoots).withPropertyName("sources")
+
+    doLast {
+        val sources = highlightSources()
+        check(sources.isNotEmpty()) {
+            "Не найдено ни одного файла пакета $highlightPackage — проверка TC-40 перестала что-либо проверять"
+        }
+
+        val rootPath = rootDir.invariantSeparatorsPath
+        val offenders = sources
+            .map { it.invariantSeparatorsPath.removePrefix("$rootPath/") }
+            .filterNot { path -> highlightAllowedRoots.any { path.startsWith("$it/") } }
+
+        check(offenders.isEmpty()) {
+            buildString {
+                append("Код подсветки вне общих исходников (TC-40, NFR «доля общего кода»):")
+                offenders.forEach { append("\n  $it") }
+                append("\nДопустимы только:")
+                highlightAllowedRoots.forEach { append("\n  $it/") }
+            }
+        }
+    }
+}
+
+/**
+ * TC-30 фичи 001-syntax-highlighting, вторая половина: в сканере нет типов Compose.
+ *
+ * Первую половину — что результат собирается из обычных значений Kotlin —
+ * держит тест `TC_30_outputIsBuiltFromPlainKotlinValues`: он просто перестанет
+ * компилироваться, если в модель приедет `SpanStyle` или `TextRange`. Но тест
+ * не увидит типа Compose, спрятанного во внутренней функции сканера, а именно
+ * оттуда он обычно и расползается. Состав импортов виден только сборке.
+ *
+ * Цена нарушения — не стиль: `FR-25` называет список диапазонов точкой, в
+ * которой поле ввода заменяется на платформенное. Замеры `T-010` показали, что
+ * такая замена вполне вероятна, и тип Compose в сканере закрывает этот путь.
+ */
+val verifyHighlightIsPlatformNeutral = tasks.register("verifyHighlightIsPlatformNeutral") {
+    group = "verification"
+    description = "Сканер подсветки не знает о Compose"
+
+    inputs.files(highlightSearchRoots).withPropertyName("sources")
+
+    doLast {
+        val forbidden = Regex("""\bandroidx\.compose\b""")
+        val production = highlightSources().filter {
+            it.invariantSeparatorsPath.contains("/commonMain/")
+        }
+        check(production.isNotEmpty()) {
+            "Не найдено production-файлов пакета $highlightPackage — проверка TC-30 перестала что-либо проверять"
+        }
+
+        val offenders = production.flatMap { file ->
+            file.readLines()
+                .withIndex()
+                .filter { (_, line) -> forbidden.containsMatchIn(line) }
+                .map { (i, line) -> "  ${file.name}:${i + 1}  ${line.trim()}" }
+        }
+
+        check(offenders.isEmpty()) {
+            "Тип Compose в сканере подсветки (TC-30, FR-25, границы работ 001-syntax-highlighting):\n" +
+                offenders.joinToString("\n") +
+                "\nВыход сканера платформенно-нейтрален: список (range, style) и ничего сверх него."
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(
+        verifyNoColorLiterals,
+        verifyFontLicenses,
+        verifyFontDeclarations,
+        verifyHighlightIsCommonOnly,
+        verifyHighlightIsPlatformNeutral,
+    )
+}
 
 kotlin {
     // Блок называется android, а не androidLibrary: последний уже помечен устаревшим.
