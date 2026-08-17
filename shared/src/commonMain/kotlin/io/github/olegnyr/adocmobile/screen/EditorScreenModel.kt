@@ -261,6 +261,25 @@ class EditorScreenModel(
         (document as? EditorDocument.Open)?.runner?.retryRequested()
     }
 
+    /**
+     * «Отменить» — из меню документа (`FR-16`) и с аппаратной клавиатуры
+     * (`FR-17`; поверхность одна, метод один — `FR-13` фичи 004 закрывается
+     * здесь же, не дважды). При пустой истории — тихий no-op, не ошибка:
+     * гарантия [DocumentEditor.undo].
+     *
+     * Правка поля доедет до модели и превью обычным путём — подпиской экрана
+     * на `TextFieldState` (`snapshotFlow` → [textEdited]): у отмены нет своего
+     * канала в модель, и потому расхождение поля с превью невозможно (`FR-6`).
+     */
+    fun undoRequested() {
+        editor.undo()
+    }
+
+    /** «Повторить» — симметрично [undoRequested]. */
+    fun redoRequested() {
+        editor.redo()
+    }
+
     /** Приложение на переднем плане — для записи при уходе в фон. */
     private var foreground = true
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,7 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -36,13 +40,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import io.github.olegnyr.adocmobile.document.DocumentEditor
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
@@ -166,7 +182,14 @@ fun EditorScreen(
                 scope.launch { if (requestFolder() != null) model.folderChosen() }
             }
 
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Undo/redo с аппаратной клавиатуры (FR-17): перехват на
+                    // предпросмотре события — раньше встроенной обработки поля,
+                    // чтобы отмена шла тем же путём, что пункт меню, а не двумя.
+                    .onPreviewKeyEvent { event -> event.undoShortcutHandled(model) },
+            ) {
                 // Обе хром-панели на одном фоне chrome; отступ статус-бара
                 // внутри фона, чтобы панель уходила под него (edge-to-edge).
                 Column(
@@ -175,7 +198,15 @@ fun EditorScreen(
                         .background(AdocTheme.colors.chrome)
                         .statusBarsPadding(),
                 ) {
-                    EditorAppBar(document)
+                    EditorAppBar(
+                        document = document,
+                        editor = editor,
+                        retryWriteVisible = model.writeFailure != null,
+                        onUndo = model::undoRequested,
+                        onRedo = model::redoRequested,
+                        onOpenFolder = openFolder,
+                        onRetryWrite = model::retryWriteRequested,
+                    )
                     ChromeDivider()
                     EditorTabs(
                         selected = selectedTab,
@@ -252,18 +283,32 @@ fun EditorScreen(
 }
 
 /**
- * App bar: имя файла и метка состояния (`FR-1`), высота 52 по макету «02».
+ * App bar: имя файла и метка состояния (`FR-1`), высота 52 по макету «02»;
+ * справа — меню документа (`FR-16`, состав — решение `OQ-4`).
  *
- * Правая часть (меню документа) придёт слайсом `SL-4` по решению `OQ-4`;
- * стрелка «назад» из макета не рисуется — экрана репозитория в MVP нет.
+ * Стрелка «назад» из макета не рисуется — экрана репозитория в MVP нет.
+ * Иконка-переключатель превью из макета опущена: дизайн-вопрос `OQ-4` о её
+ * судьбе при живых вкладках не решён, а дублировать вкладку по умолчанию —
+ * значит решить его за дизайнера.
+ *
+ * @param retryWriteVisible пункт «Повторить запись» уместен только пока отказ
+ * записи актуален (`FR-19` фичи 004): плашка горит — пункт есть.
  */
 @Composable
-private fun EditorAppBar(document: EditorDocument) {
+private fun EditorAppBar(
+    document: EditorDocument,
+    editor: DocumentEditor,
+    retryWriteVisible: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onOpenFolder: () -> Unit,
+    onRetryWrite: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .padding(horizontal = 14.dp),
+            .padding(start = 14.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (document is EditorDocument.Open) {
@@ -291,8 +336,141 @@ private fun EditorAppBar(document: EditorDocument) {
                     )
                 }
             }
+        } else {
+            Box(modifier = Modifier.weight(1f))
+        }
+
+        DocumentMenu(
+            editor = editor,
+            retryWriteVisible = retryWriteVisible,
+            onUndo = onUndo,
+            onRedo = onRedo,
+            onOpenFolder = onOpenFolder,
+            onRetryWrite = onRetryWrite,
+        )
+    }
+}
+
+/**
+ * Меню документа (`FR-16`) — состав решён владельцем (`OQ-4`): «Отменить»,
+ * «Повторить», «Открыть папку…», «Повторить запись» при живом отказе.
+ *
+ * Макет «02» рисует только кнопку меню, содержимого у меню в хэндоффе нет —
+ * панель собрана в языке дизайна: квадратные углы, поверхность `raised` с
+ * рамкой `borderObject`, пункты Barlow Condensed прописными. Своя панель на
+ * [Popup] вместо Material `DropdownMenu` — той же логикой, что весь экран:
+ * компоненты Material несут скругления и цвета схемы, которые пришлось бы
+ * подавлять по месту.
+ *
+ * Недоступные пункты ([DocumentEditor.canUndo]/[canRedo]) показываются
+ * приглушённо и не реагируют на касание — не прячутся и не бросают ошибку
+ * (`FR-16`); касание доступного пункта закрывает меню.
+ */
+@Composable
+private fun DocumentMenu(
+    editor: DocumentEditor,
+    retryWriteVisible: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onOpenFolder: () -> Unit,
+    onRetryWrite: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        MenuButton(onClick = { expanded = true })
+
+        if (expanded) {
+            val dismiss = { expanded = false }
+            // Панель — под кнопкой, правым краем к правому краю app bar.
+            val offsetY = with(LocalDensity.current) { 48.dp.roundToPx() }
+            Popup(
+                alignment = Alignment.TopEnd,
+                offset = IntOffset(0, offsetY),
+                onDismissRequest = dismiss,
+                properties = PopupProperties(focusable = true),
+            ) {
+                Column(
+                    modifier = Modifier
+                        // Панель по ширине самого длинного пункта, не во весь
+                        // экран: fillMaxWidth пунктов разрешается в интринсику.
+                        .width(IntrinsicSize.Max)
+                        .widthIn(min = 200.dp)
+                        .background(AdocTheme.colors.raised)
+                        .border(1.dp, AdocTheme.colors.borderObject),
+                ) {
+                    MenuItem("ОТМЕНИТЬ", enabled = editor.canUndo) {
+                        onUndo()
+                        dismiss()
+                    }
+                    MenuItem("ПОВТОРИТЬ", enabled = editor.canRedo) {
+                        onRedo()
+                        dismiss()
+                    }
+                    MenuItem("ОТКРЫТЬ ПАПКУ…") {
+                        onOpenFolder()
+                        dismiss()
+                    }
+                    if (retryWriteVisible) {
+                        MenuItem("ПОВТОРИТЬ ЗАПИСЬ") {
+                            onRetryWrite()
+                            dismiss()
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+/**
+ * Кнопка меню в app bar: касаемая площадка 44×44, значок — три квадратные
+ * точки. Макет рисует здесь kebab-иконку Lucide; набора иконок в проекте нет,
+ * и точки собраны из квадратов в визуальном языке (везде прямые углы) —
+ * отступление названо в журнале, замена придёт с набором иконок.
+ */
+@Composable
+private fun MenuButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            repeat(3) {
+                Box(modifier = Modifier.size(3.dp).background(AdocTheme.colors.textSecondary))
+            }
+        }
+    }
+}
+
+/** Пункт меню документа; недоступный — приглушён и не касаем, не спрятан (`FR-16`). */
+@Composable
+private fun MenuItem(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = adocTextStyle(AdocTypography.buttonLabel),
+        color = if (enabled) AdocTheme.colors.textSecondary else AdocTheme.colors.textFaint,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    )
+}
+
+/**
+ * Undo/redo с аппаратной клавиатуры (`FR-17`): сочетания — `Ctrl+Z` /
+ * `Ctrl+Shift+Z`, как записано в `TC-15` (фича 004 `FR-13` самих сочетаний не
+ * называет). Событие поглощается, чтобы встроенная обработка поля не отменила
+ * второй раз; недоступное действие — тот же тихий no-op, что в меню.
+ */
+private fun KeyEvent.undoShortcutHandled(model: EditorScreenModel): Boolean {
+    if (type != KeyEventType.KeyDown || !isCtrlPressed || key != Key.Z) return false
+    if (isShiftPressed) model.redoRequested() else model.undoRequested()
+    return true
 }
 
 /** Полоса вкладок высотой 44; активная помечена акцентной линией снизу и цветом (`FR-2`, `NFR-9`). */

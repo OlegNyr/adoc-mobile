@@ -422,10 +422,90 @@ class EditorScreenModelTest {
         assertEquals(before, renderer.requests.size, "скрытое превью не рендерит и по паузе")
     }
 
+    @Test
+    fun TC_15_menuUndoRevertsInputAndRedoRestoresIt() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+
+        model.typeText("исходный правленый")
+        assertTrue(model.editor.canUndo, "после правки есть что отменять (FR-16)")
+        assertFalse(model.editor.canRedo)
+
+        // Пункт меню «Отменить» (FR-16) и Ctrl+Z (FR-17) сходятся в одном
+        // методе holder-а; текст меняется в том же TextFieldState (FR-6).
+        model.undoRequested()
+        model.notifyFieldChanged()
+        assertEquals("исходный", model.editor.textFieldState.text.toString(), "undo вернул предыдущее состояние")
+        assertTrue(model.editor.canRedo, "отменённый шаг доступен повтору")
+
+        model.redoRequested()
+        model.notifyFieldChanged()
+        assertEquals("исходный правленый", model.editor.textFieldState.text.toString(), "redo вернул отменённое")
+        assertFalse(model.editor.canRedo)
+    }
+
+    @Test
+    fun TC_15_undoRedoWithEmptyHistoryDoNothingAndDoNotThrow() {
+        // Без документа: полю неоткуда взять историю — тихий no-op (FR-16).
+        val bare = model()
+        bare.start()
+        assertIs<EditorDocument.NoFolder>(bare.document)
+        bare.undoRequested()
+        bare.redoRequested()
+
+        // С документом, но пустой историей: флаги недоступности для меню,
+        // вызовы — no-op, не ошибка (FR-16; наследует TC-13 фичи 004).
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+        assertFalse(model.editor.canUndo, "пустая история — пункт «Отменить» недоступен")
+        assertFalse(model.editor.canRedo, "пустая история — пункт «Повторить» недоступен")
+        model.undoRequested()
+        model.redoRequested()
+        assertEquals("исходный", model.editor.textFieldState.text.toString(), "текст не тронут")
+        assertEquals(0, access.written.size, "no-op не рождает записи")
+    }
+
+    @Test
+    fun TC_14_menuUndoDrivesLabelAndPreviewFromSingleState() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+        val runner = model.openRunner()
+
+        // Превью видно: первый рендер — немедленно, исходным текстом.
+        model.previewVisibilityChanged(visible = true)
+        assertEquals(listOf("исходный"), renderer.requests)
+
+        model.typeText("исходный правленый")
+        assertEquals(EDITOR_MODIFIED_LABEL, editorStatusLabel(runner.document), "правка зажгла метку")
+
+        // Undo из меню: одно поле на всех (FR-6) — метка пересчиталась…
+        model.undoRequested()
+        model.notifyFieldChanged()
+        assertEquals("исходный", model.editor.textFieldState.text.toString())
+        assertNull(editorStatusLabel(runner.document), "текст совпал с записанным — метка погасла")
+
+        // …и превью после паузы соответствует отменённому тексту.
+        now += 10_000
+        waits.releaseAll()
+        assertEquals("исходный", renderer.requests.last(), "превью строится из того же текста, что в поле (TC-14)")
+        assertEquals(0, access.written.size, "текст совпал с диском — записи нет")
+    }
+
     /** Правка как в продукте: сначала поле, затем событие модели (подписка `snapshotFlow`). */
     private fun EditorScreenModel.typeText(text: String) {
         editor.textFieldState.edit { replace(0, length, text) }
         textEdited(text)
+    }
+
+    /** Подписка `snapshotFlow` после программной правки поля (undo/redo). */
+    private fun EditorScreenModel.notifyFieldChanged() {
+        textEdited(editor.textFieldState.text.toString())
     }
 
     private fun EditorScreenModel.openRunnerPreview() =
