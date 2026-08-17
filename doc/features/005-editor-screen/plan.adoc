@@ -64,7 +64,7 @@ toc::[]
 | Каркас экрана: app bar с именем и статусом из модели, вкладки, полотно `AdocEditor`, автоподъём `heldSource`; каркас заменяет `EditorSkeleton` в `MainActivity`
 | FR-1, FR-2, FR-5, FR-6, FR-7, FR-8, FR-10; TC-1, TC-2, TC-4, TC-5, TC-16; NFR-5, NFR-7
 | —
-| {st-todo}
+| {st-done}
 
 | SL-2
 | E1

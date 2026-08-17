@@ -7,7 +7,7 @@
 :owner: onyrk
 :created: 2026-08-17
 :updated: 2026-08-17
-:targets: shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/ui/editor/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/ui/editor/**, androidApp/src/main/**
+:targets: shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/screen/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/screen/**, androidApp/src/main/**
 :toc: macro
 :toc-title: Содержание
 :sectanchors:
