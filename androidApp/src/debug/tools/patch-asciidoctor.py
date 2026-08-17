@@ -16,7 +16,7 @@ asciidoctor/asciidoctor.js.
     tar xzf core.tgz
     python androidApp/src/debug/tools/patch-asciidoctor.py \
         package/build/browser/index.js \
-        androidApp/src/debug/assets/asciidoctor/asciidoctor.js
+        shared/src/androidMain/assets/asciidoctor/asciidoctor.js
 """
 
 import re

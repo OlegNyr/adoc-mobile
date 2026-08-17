@@ -101,7 +101,46 @@ val verifyRenderStandPackaged = tasks.register("verifyRenderStandPackaged") {
     }
 }
 
-tasks.named("check") { dependsOn(verifyFontsPackaged, verifyRenderStandPackaged) }
+/**
+ * То же для продуктовой сборки: бандл и нативная библиотека обязаны быть в
+ * *release*-APK.
+ *
+ * Задача заведена вместе с переносом бандла из `androidApp/src/debug/assets` в
+ * `shared/src/androidMain/assets` (фича 003, `SL-1`). Перенос сделан ради
+ * release-сборки, и проверять его debug-APK бессмысленно: там ассет мог бы
+ * приехать из отладочного набора исходников и скрыть ошибку.
+ *
+ * Цена — сборка release-APK на обычном прогоне проверок. Заплачена сознательно:
+ * ровно этот класс отказов (зелёная сборка, пустой артефакт) в проекте уже
+ * случался со шрифтами.
+ */
+val verifyBundlePackagedInRelease = tasks.register("verifyBundlePackagedInRelease") {
+    group = "verification"
+    description = "Бандл Asciidoctor.js и нативный QuickJS попали в release-APK"
+    dependsOn("assembleRelease")
+
+    val apkDir = layout.buildDirectory.dir("outputs/apk/release")
+    inputs.dir(apkDir)
+
+    doLast {
+        val apk = apkDir.get().asFile.listFiles { f -> f.extension == "apk" }?.firstOrNull()
+        checkNotNull(apk) { "Release-APK не найден в ${apkDir.get().asFile}" }
+
+        val entries = ZipFile(apk).use { zip -> zip.entries().asSequence().map { it.name }.toList() }
+        check(entries.any { it == "assets/asciidoctor/asciidoctor.js" }) {
+            "Бандл Asciidoctor.js не попал в release-APK: нет assets/asciidoctor/asciidoctor.js.\n" +
+                "Проверьте androidResources { enable = true } в :shared — ассеты KMP-модуля " +
+                "по умолчанию выключены, и сборка при этом остаётся зелёной."
+        }
+        check(entries.any { it.startsWith("lib/") && it.endsWith("libquickjs.so") }) {
+            "Нативная библиотека QuickJS не попала в release-APK: нет lib/*/libquickjs.so"
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyFontsPackaged, verifyRenderStandPackaged, verifyBundlePackagedInRelease)
+}
 
 dependencies {
     // Compose приходит транзитивно из :shared через api — версии живут только в каталоге.

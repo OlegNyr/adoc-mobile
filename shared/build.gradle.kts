@@ -233,6 +233,65 @@ val verifyHighlightIsPlatformNeutral = tasks.register("verifyHighlightIsPlatform
     }
 }
 
+/**
+ * TC-28 фичи 003-render-preview: платформенных швов ровно два.
+ *
+ * NFR «доля общего кода» называет их поимённо — реализация `render` и обёртка
+ * WebView, — и это не пожелание: третий шов означает, что часть поведения
+ * продукта переехала в платформенный код и на второй платформе будет написана
+ * заново. Составом файлов такое не поймать (реализация движка *обязана* жить в
+ * androidMain), поэтому считаются объявления `expect`/`actual`.
+ *
+ * Проверка двусторонняя и по именам: и лишний шов, и молчаливое переименование
+ * существующего валят прогон. Пустой результат валит тоже — проверка, которая
+ * перестала что-либо находить, хуже отсутствующей.
+ */
+val verifyRenderSeams = tasks.register("verifyRenderSeams") {
+    group = "verification"
+    description = "У рендера и превью ровно два платформенных шва"
+
+    val featureRoots = files(rootDir.resolve("shared/src"), rootDir.resolve("androidApp/src"))
+    val expectedSeams = setOf("adocRenderer", "AdocPreview")
+    inputs.files(featureRoots).withPropertyName("sources")
+
+    doLast {
+        val featureFiles = featureRoots.asFileTree
+            .matching { include("**/*.kt") }
+            .filter { file ->
+                val path = file.invariantSeparatorsPath
+                path.contains("/adocmobile/render/") || path.contains("/adocmobile/preview/")
+            }
+            .toList()
+        check(featureFiles.isNotEmpty()) {
+            "Не найдено ни одного файла пакетов render/preview — проверка TC-28 перестала что-либо проверять"
+        }
+
+        // Имя объявления берётся из той же строки: `expect fun adocRenderer(…)`.
+        fun namesOf(keyword: String, sourceSet: String): Set<String> {
+            val declaration = Regex("""^$keyword\s+(?:@\w+\s+)*(?:fun|class|object|val|var)\s+(\w+)""")
+            return featureFiles
+                .filter { it.invariantSeparatorsPath.contains("/$sourceSet/") }
+                .flatMap { file -> file.readLines().mapNotNull { declaration.find(it)?.groupValues?.get(1) } }
+                .toSet()
+        }
+
+        val declared = namesOf("expect", "commonMain")
+        val implemented = namesOf("actual", "androidMain")
+
+        check(declared == expectedSeams) {
+            "Состав швов рендера и превью изменился (TC-28, NFR «доля общего кода»).\n" +
+                "  ожидались: ${expectedSeams.sorted()}\n" +
+                "  объявлены: ${declared.sorted()}\n" +
+                "Третий шов — это поведение продукта, уехавшее в платформенный код."
+        }
+        check(implemented == expectedSeams) {
+            "Реализации швов в androidMain разошлись с объявлениями (TC-28).\n" +
+                "  ожидались: ${expectedSeams.sorted()}\n" +
+                "  реализованы: ${implemented.sorted()}"
+        }
+    }
+}
+
 tasks.named("check") {
     dependsOn(
         verifyNoColorLiterals,
@@ -240,6 +299,7 @@ tasks.named("check") {
         verifyFontDeclarations,
         verifyHighlightIsCommonOnly,
         verifyHighlightIsPlatformNeutral,
+        verifyRenderSeams,
     )
 }
 
@@ -284,6 +344,11 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
+
+            // Движок рендера (FR-2). Он приезжает вместе с нативной библиотекой
+            // QuickJS, поэтому объявлен implementation: приложению видеть его
+            // незачем, оно работает через контракт AdocRenderer.
+            implementation(libs.quickjs.kt)
         }
     }
 }
