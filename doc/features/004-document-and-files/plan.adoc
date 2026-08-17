@@ -96,7 +96,7 @@ toc::[]
 | Отмена и повтор из меню документа и с клавиатуры
 | FR-13
 | SL-3
-| {st-todo}
+| {st-done}
 |===
 
 Статусы: {st-todo} · {st-wip} · {st-done} · {st-hold} · {st-drop}
