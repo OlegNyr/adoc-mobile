@@ -41,7 +41,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends graphviz
 
       # Начиная с asciidoctor-diagram 3.0 гем plantuml не подтягивается
-      # транзитивно и ставится отдельно.
+      # транзитивно и ставится отдельно. Требовать его через --require нельзя:
+      # это обёртка над JAR без загружаемой точки входа, её находит сам
+      # asciidoctor-diagram по факту установки.
       - name: Установка Asciidoctor и PlantUML
         run: |
           gem install --no-document \
@@ -63,7 +65,6 @@ jobs:
         run: |
           asciidoctor \
             --require asciidoctor-diagram \
-            --require asciidoctor-diagram-plantuml \
             --failure-level=WARN \
             --attribute attribute-missing=warn \
             build/docs/*.adoc \
