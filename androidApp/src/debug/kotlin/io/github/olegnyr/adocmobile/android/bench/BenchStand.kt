@@ -37,22 +37,32 @@ const val BENCH_EDITOR_TAG = "bench-editor"
  *
  * @param stylesPerDocument сколько диапазонов ставить; 0 отключает стилизацию,
  * что даёт базовую линию «поле без подсветки».
+ * @param fromLine с какой строки начинать ставить диапазоны. Нужен, чтобы
+ * отличить стоимость самого диапазона от стоимости его отрисовки: при большом
+ * значении все стили оказываются вне экрана, а их число не меняется.
  */
-class StubHighlight(private val stylesPerDocument: Int) : OutputTransformation {
+class StubHighlight(
+    private val stylesPerDocument: Int,
+    private val fromLine: Int = 0,
+) : OutputTransformation {
 
     override fun TextFieldBuffer.transformOutput() {
         if (stylesPerDocument <= 0) return
         val text = toString()
         var placed = 0
+        var line = 0
         var lineStart = 0
         while (lineStart < text.length && placed < stylesPerDocument) {
             val lineEnd = text.indexOf('\n', lineStart).let { if (it == -1) text.length else it }
-            val tokenEnd = minOf(lineStart + TOKEN_LENGTH, lineEnd)
-            if (tokenEnd > lineStart) {
-                addStyle(HIGHLIGHT, lineStart, tokenEnd)
-                placed++
+            if (line >= fromLine) {
+                val tokenEnd = minOf(lineStart + TOKEN_LENGTH, lineEnd)
+                if (tokenEnd > lineStart) {
+                    addStyle(HIGHLIGHT, lineStart, tokenEnd)
+                    placed++
+                }
             }
             lineStart = lineEnd + 1
+            line++
         }
     }
 
@@ -64,7 +74,7 @@ class StubHighlight(private val stylesPerDocument: Int) : OutputTransformation {
 
 /** Экран стенда: поле с документом заданного размера и заглушкой подсветки. */
 @Composable
-fun BenchStand(lines: Int, styles: Int) {
+fun BenchStand(lines: Int, styles: Int, fromLine: Int = 0) {
     AdocTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -72,7 +82,7 @@ fun BenchStand(lines: Int, styles: Int) {
             contentColor = AdocTheme.colors.textSecondary,
         ) {
             val state: TextFieldState = rememberTextFieldState(remember(lines) { generateDocument(lines) })
-            val transformation = remember(styles) { StubHighlight(styles) }
+            val transformation = remember(styles, fromLine) { StubHighlight(styles, fromLine) }
 
             BasicTextField(
                 state = state,

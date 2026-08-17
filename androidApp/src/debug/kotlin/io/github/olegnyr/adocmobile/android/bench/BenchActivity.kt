@@ -14,7 +14,9 @@ import androidx.activity.enableEdgeToEdge
  * adb shell am start -n io.github.olegnyr.adocmobile/.android.bench.BenchActivity --ei lines 3000 --ei styles 3000
  * ```
  * `lines` — размер документа, `styles` — сколько диапазонов ставит заглушка
- * подсветки (0 даёт базовую линию «поле без подсветки»).
+ * подсветки (0 даёт базовую линию «поле без подсветки»), `from` — с какой
+ * строки их ставить: большое значение уводит все диапазоны за пределы экрана,
+ * не меняя их числа.
  */
 class BenchActivity : ComponentActivity() {
 
@@ -27,9 +29,10 @@ class BenchActivity : ComponentActivity() {
 
         val lines = intent.getIntExtra("lines", DEFAULT_LINES)
         val styles = intent.getIntExtra("styles", lines)
+        val fromLine = intent.getIntExtra("from", 0)
 
         setContent {
-            BenchStand(lines = lines, styles = styles)
+            BenchStand(lines = lines, styles = styles, fromLine = fromLine)
         }
     }
 
