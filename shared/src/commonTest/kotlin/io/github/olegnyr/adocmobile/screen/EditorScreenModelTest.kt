@@ -5,10 +5,14 @@ import androidx.compose.foundation.text.input.insert
 import io.github.olegnyr.adocmobile.document.AutosavePolicy
 import io.github.olegnyr.adocmobile.document.DocumentAccessError
 import io.github.olegnyr.adocmobile.document.DocumentEditor
-import io.github.olegnyr.adocmobile.document.DocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentOpenResult
 import io.github.olegnyr.adocmobile.document.DocumentSource
+import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
+import io.github.olegnyr.adocmobile.document.DocumentWriteError
 import io.github.olegnyr.adocmobile.document.DocumentWriteResult
+import io.github.olegnyr.adocmobile.document.TreeAccessError
+import io.github.olegnyr.adocmobile.document.TreeListResult
+import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.document.openDocument
 import io.github.olegnyr.adocmobile.preview.PreviewStatus
 import io.github.olegnyr.adocmobile.render.AdocRenderer
@@ -24,8 +28,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Слайс `SL-1` фичи 005-editor-screen: логика holder-а экрана с подставными
- * швами — `TC-1`, `TC-2`, `TC-5`, `TC-6` и автоматизируемая половина `TC-4`.
+ * Логика holder-а экрана с подставными швами — слайсы `SL-1` и `SL-3` фичи
+ * 005-editor-screen: `TC-1`, `TC-2`, `TC-5`, `TC-6`, автоматизируемая половина
+ * `TC-4`, автосохранение сквозь экран (`TC-7`…`TC-9`) и переключение на папку
+ * (решение `OQ-1`, `FR-1a` фичи 004).
  *
  * Приём тот же, что в `AutosaveRunnerTest`: часы — переменная, ожидание паузы —
  * подставная функция с воротами, файловый шов — подделка интерфейса, диспетчер
@@ -74,13 +80,82 @@ class EditorScreenModelTest {
     }
 
     @Test
-    fun TC_5_startWithoutHeldSourceStaysWithoutDocument() {
+    fun TC_5_startWithoutHeldSourceAndTreeStaysWithoutFolder() {
         val model = model()
 
         model.start()
 
-        assertIs<EditorDocument.None>(model.document)
+        assertIs<EditorDocument.NoFolder>(model.document)
         assertEquals(0, access.openCalls, "без удержанного источника шов не дёргается")
+    }
+
+    /**
+     * Кейсы папки (этот и три следующих) заведены реализацией `SL-3` по решению
+     * владельца `OQ-1` («папка, затем файл в ней»): в спеке 005 идентификаторов
+     * для них нет — аналитика писалась до решения о tree-доступе. Дозаявление
+     * `TC-*` — правка `doc/`, вне зоны слайса; пробел назван в отчёте слайса.
+     * Наблюдаемое поведение — `FR-1a` фичи 004 на уровне экрана.
+     */
+    @Test
+    fun startWithHeldTreeWithoutDocumentListsFolder() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        val model = model()
+
+        model.start()
+
+        val browsing = assertIs<EditorDocument.Browsing>(model.document)
+        assertEquals("Документы", browsing.tree.displayName)
+        assertEquals(listOf(held), browsing.documents)
+        assertNull(browsing.notice)
+    }
+
+    @Test
+    fun startWithEmptyFolderBrowsesEmptyList() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = emptyList()
+        val model = model()
+
+        model.start()
+
+        val browsing = assertIs<EditorDocument.Browsing>(model.document)
+        assertEquals(
+            emptyList<DocumentSource>(),
+            browsing.documents,
+            "папка без документов — пустой список, не ошибка (FR-1a фичи 004)",
+        )
+    }
+
+    @Test
+    fun listingFailureShowsFolderMessage() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listError = TreeAccessError.PermissionLost
+        val model = model()
+
+        model.start()
+
+        val failed = assertIs<EditorDocument.FolderFailed>(model.document)
+        assertEquals(TreeAccessError.PermissionLost.userMessage("Документы"), failed.message)
+    }
+
+    @Test
+    fun folderChosenListsAndDocumentChoiceOpensEditor() {
+        val model = model()
+        model.start()
+        assertIs<EditorDocument.NoFolder>(model.document)
+
+        // Платформа взяла право на дерево — holder перечисляет его документы.
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.contents[held.id] = "= Заголовок"
+        model.folderChosen()
+        assertIs<EditorDocument.Browsing>(model.document)
+
+        // Выбор документа из списка открывает его в редакторе.
+        model.open(held)
+        val runner = model.openRunner()
+        assertEquals(held, runner.document.source)
+        assertEquals("= Заголовок", model.editor.textFieldState.text.toString())
     }
 
     @Test
@@ -150,16 +225,110 @@ class EditorScreenModelTest {
     }
 
     @Test
-    fun TC_6_openFailureShowsUserMessageAndLeavesNoDocument() {
+    fun TC_6_openFailureShowsUserMessageAndReturnsToFolderList() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.held = held
+        access.openError = DocumentAccessError.NotFound
+        val model = model()
+
+        model.start()
+
+        val browsing = assertIs<EditorDocument.Browsing>(model.document, "отказ открытия возвращает к списку (FR-9)")
+        assertEquals(DocumentAccessError.NotFound.userMessage("заметка.adoc"), browsing.notice)
+        assertEquals("", model.editor.textFieldState.text.toString(), "в поле ничего не загружено (FR-9)")
+    }
+
+    @Test
+    fun TC_6_openFailureWithDeadTreeShowsFolderMessage() {
+        // Право на дерево отозвано: и файл не открывается, и папка не
+        // перечисляется — пользователь видит сообщение о папке и выбор заново.
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listError = TreeAccessError.PermissionLost
         access.held = held
         access.openError = DocumentAccessError.PermissionLost
         val model = model()
 
         model.start()
 
-        val failed = assertIs<EditorDocument.OpenFailed>(model.document)
-        assertEquals(DocumentAccessError.PermissionLost.userMessage("заметка.adoc"), failed.message)
-        assertEquals("", model.editor.textFieldState.text.toString(), "в поле ничего не загружено (FR-9)")
+        val failed = assertIs<EditorDocument.FolderFailed>(model.document)
+        assertEquals(TreeAccessError.PermissionLost.userMessage("Документы"), failed.message)
+    }
+
+    @Test
+    fun TC_8_movedToBackgroundWritesImmediately() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+
+        model.textEdited("исходный правленый")
+        assertEquals(0, access.written.size, "до паузы записи нет")
+
+        model.foregroundChanged(false)
+        assertEquals(
+            listOf(held.id to "исходный правленый"),
+            access.written,
+            "уход в фон пишет немедленно, не дожидаясь паузы (FR-11, FR-16 фичи 004)",
+        )
+
+        // Возврат на передний план и повторный уход без правок файл не трогают.
+        model.foregroundChanged(true)
+        model.foregroundChanged(false)
+        assertEquals(1, access.written.size, "без расхождения с диском записи нет")
+    }
+
+    @Test
+    fun TC_9_writeFailureShowsMessageKeepsTextAndDoesNotRetrySilently() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        access.writeError = DocumentWriteError.PermissionLost
+        val model = model()
+        model.start()
+        val runner = model.openRunner()
+
+        model.typeText("исходный правленый")
+        now = AutosavePolicy.DEFAULT_PAUSE_MILLIS + 1
+        waits.releaseAll()
+
+        assertEquals(1, access.written.size, "попытка записи была ровно одна")
+        assertEquals(
+            DocumentWriteError.PermissionLost.userMessage("заметка.adoc"),
+            model.writeFailure,
+            "отказ записи наблюдаем текстом userMessage (TC-9; OQ-3)",
+        )
+        assertEquals("исходный правленый", model.editor.textFieldState.text.toString(), "текст остаётся в поле (FR-12)")
+        assertEquals("ИЗМЕНЁН · НЕ СОХРАНЁН", editorStatusLabel(runner.document), "метка продолжает гореть")
+
+        // Без явной правки и без ручного повтора новых попыток нет (FR-19 фичи 004).
+        now += 10_000
+        waits.releaseAll()
+        assertEquals(1, access.written.size, "автосохранение после отказа приостановлено")
+    }
+
+    @Test
+    fun TC_9_retryRequestedWritesAgainAndSuccessClearsFailure() {
+        access.held = held
+        access.contents[held.id] = "исходный"
+        access.writeError = DocumentWriteError.WriteFailed
+        val model = model()
+        model.start()
+
+        model.textEdited("исходный правленый")
+        now = AutosavePolicy.DEFAULT_PAUSE_MILLIS + 1
+        waits.releaseAll()
+        assertEquals(1, access.written.size)
+
+        // Повтор при живом отказе: попытка уходит, плашка остаётся.
+        model.retryWriteRequested()
+        assertEquals(2, access.written.size, "ручной повтор — вторая попытка (FR-19 фичи 004)")
+        assertEquals(DocumentWriteError.WriteFailed.userMessage("заметка.adoc"), model.writeFailure)
+
+        // Причина отказа ушла — повтор записывает и гасит плашку.
+        access.writeError = null
+        model.retryWriteRequested()
+        assertEquals(3, access.written.size)
+        assertNull(model.writeFailure, "успешная запись гасит плашку отказа")
     }
 
     @Test
@@ -270,10 +439,14 @@ class EditorScreenModelTest {
     }
 
     /** Шов-подделка по образцу `AutosaveRunnerTest`: содержимое и исходы задаются тестом. */
-    private class FakeAccess : DocumentFileAccess {
+    private class FakeAccess : DocumentTreeAccess {
         var held: DocumentSource? = null
+        var tree: TreeSource? = null
+        var listing: List<DocumentSource> = emptyList()
+        var listError: TreeAccessError? = null
         val contents = mutableMapOf<String, String>()
         var openError: DocumentAccessError? = null
+        var writeError: DocumentWriteError? = null
         var openCalls = 0
         val written = mutableListOf<Pair<String, String>>()
 
@@ -287,13 +460,24 @@ class EditorScreenModelTest {
 
         override suspend fun write(source: DocumentSource, fileText: String): DocumentWriteResult {
             written += source.id to fileText
+            writeError?.let { return DocumentWriteResult.Failed(source, it) }
             return DocumentWriteResult.Written
         }
 
         override fun heldSource(): DocumentSource? = held
 
+        override fun heldTree(): TreeSource? = tree
+
+        override suspend fun listDocuments(): TreeListResult {
+            val heldTree = tree
+                ?: return TreeListResult.Failed(TreeSource("", "папка"), TreeAccessError.PermissionLost)
+            listError?.let { return TreeListResult.Failed(heldTree, it) }
+            return TreeListResult.Listed(listing)
+        }
+
         override fun release() {
             held = null
+            tree = null
         }
     }
 

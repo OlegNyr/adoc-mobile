@@ -9,6 +9,10 @@ import io.github.olegnyr.adocmobile.document.DocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentOpenResult
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentState
+import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
+import io.github.olegnyr.adocmobile.document.DocumentWriteResult
+import io.github.olegnyr.adocmobile.document.TreeListResult
+import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.preview.previewPage
 import io.github.olegnyr.adocmobile.render.AdocRenderer
 import kotlinx.coroutines.CoroutineScope
@@ -18,23 +22,38 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Что показывает экран редактора: документа нет, документ не открылся, документ открыт.
+ * Что показывает экран редактора: папки нет, папка недоступна, список
+ * документов папки, документ открыт.
  *
- * Отдельный тип, а не пара флагов, — тем же приёмом, что `AccessScreenState`
- * временной поверхности: «нет документа» и «не открылся» различаются действием
- * пользователя (у второго есть сообщение `FR-9`), и смешивать их нельзя.
+ * Отдельный тип, а не набор флагов, — тем же приёмом, что `AccessScreenState`
+ * временной поверхности: состояния различаются действием пользователя, и
+ * смешивать их нельзя. Сценарий — решение владельца `OQ-1`: сначала папка,
+ * затем файл в ней (tree-доступ, журнал 004 `SL-7`).
  */
 sealed interface EditorDocument {
 
-    /** Документа нет: первый запуск или источник не удерживается. */
-    data object None : EditorDocument
+    /** Папка не выбрана: первый запуск или право на дерево отдано. */
+    data object NoFolder : EditorDocument
 
     /**
-     * Открытие не удалось; [message] — готовый текст для пользователя
-     * (`DocumentAccessError.userMessage`, `FR-9`). Экран остаётся в состоянии
-     * «нет документа» с возможностью выбрать файл заново.
+     * Папку не удалось перечислить; [message] — готовый текст для пользователя
+     * (`TreeAccessError.userMessage`, `FR-3` фичи 004). Действие пользователя —
+     * выбрать папку заново.
      */
-    data class OpenFailed(val message: String) : EditorDocument
+    data class FolderFailed(val message: String) : EditorDocument
+
+    /**
+     * Папка открыта, документ не выбран: `.adoc`-документы её корня по имени
+     * (`FR-1a` фичи 004; пустой список — папка без документов, не ошибка).
+     *
+     * @property notice отказ открытия выбранного документа
+     * (`DocumentAccessError.userMessage`, `FR-9`); `null` — отказа не было
+     */
+    data class Browsing(
+        val tree: TreeSource,
+        val documents: List<DocumentSource>,
+        val notice: String? = null,
+    ) : EditorDocument
 
     /**
      * Документ открыт; [runner] несёт модель документа и автосохранение,
@@ -69,7 +88,7 @@ const val EDITOR_MODIFIED_LABEL: String = "ИЗМЕНЁН · НЕ СОХРАНЁ
  *   экран через `rememberSaveable` (`FR-7`, KDoc [DocumentEditor]);
  * * модель документа и автосохранение — [AutosaveRunner], по экземпляру на
  *   документ: политика рассчитана на один документ (`FR-8`, журнал 004 `SL-4`);
- * * файлы — только через шов [DocumentFileAccess] (`NFR-6`).
+ * * файлы и перечень папки — только через шов [DocumentTreeAccess] (`NFR-6`).
  *
  * События приходят из композиции, то есть с главного потока; класс, как и
  * исполнитель автосохранения, не потокобезопасен намеренно.
@@ -81,7 +100,7 @@ const val EDITOR_MODIFIED_LABEL: String = "ИЗМЕНЁН · НЕ СОХРАНЁ
  */
 class EditorScreenModel(
     val editor: DocumentEditor,
-    private val access: DocumentFileAccess,
+    private val access: DocumentTreeAccess,
     private val renderer: AdocRenderer,
     private val scope: CoroutineScope,
     private val clock: () -> Long,
@@ -92,7 +111,18 @@ class EditorScreenModel(
 ) {
 
     /** Что показывать: наблюдаемое состояние для композиции. */
-    var document: EditorDocument by mutableStateOf(EditorDocument.None)
+    var document: EditorDocument by mutableStateOf(EditorDocument.NoFolder)
+        private set
+
+    /**
+     * Отказ последней записи — текст `DocumentWriteError.userMessage` для
+     * плашки под app bar (`FR-12`, решение `OQ-3`); `null` — плашки нет.
+     *
+     * Гаснет только успешной записью или сменой документа, а не первой же
+     * правкой: пока текст не лёг в файл, отказ остаётся правдой, и прятать его
+     * по нажатию клавиши значило бы мигать плашкой на каждой попытке.
+     */
+    var writeFailure: String? by mutableStateOf(null)
         private set
 
     /**
@@ -105,7 +135,8 @@ class EditorScreenModel(
     private var documentScope: CoroutineScope? = null
 
     /**
-     * Поднять последний удержанный источник (`FR-8`, `UC-1`).
+     * Поднять последний удержанный источник (`FR-8`, `UC-1`); без него —
+     * показать документы удержанного дерева, без дерева — пустоту `OQ-1`.
      *
      * @param fieldSourceId источник, чей текст уже лежит в поле ввода, —
      * восстановление `rememberSaveable` после поворота или выгрузки процесса.
@@ -116,17 +147,38 @@ class EditorScreenModel(
      */
     fun start(fieldSourceId: String? = null) {
         if (document is EditorDocument.Open) return
-        val held = access.heldSource() ?: return
-        open(held, keepField = held.id == fieldSourceId)
+        val held = access.heldSource()
+        if (held != null) {
+            open(held, keepField = held.id == fieldSourceId)
+        } else {
+            scope.launch { browseHeldTree() }
+        }
     }
 
     /**
-     * Открыть документ по источнику.
+     * Платформа взяла право на новое дерево — перечислить его документы.
      *
-     * Отказ открытия — штатный сценарий (`FR-9`): состояние становится
-     * [EditorDocument.OpenFailed] с текстом `userMessage`. Если при этом уже
-     * открыт другой документ, он остаётся на экране нетронутым — терять рабочий
-     * документ из-за неудачной попытки открыть новый нельзя.
+     * Параметров нет намеренно: право и ссылка уже удержаны платформенной
+     * половиной шва (`takePersistableTreeAccess`), holder лишь спрашивает шов.
+     * Прежний документ, если был открыт, закрывается без записи: вместе с
+     * правом на новое дерево платформа отдала право на старое, и хвост записи
+     * туда уже не пройдёт (правило «ровно одно право», журнал 004 `SL-7`).
+     */
+    fun folderChosen() {
+        documentScope?.cancel()
+        documentScope = null
+        writeFailure = null
+        scope.launch { browseHeldTree() }
+    }
+
+    /**
+     * Открыть документ по источнику — из списка папки или удержанный.
+     *
+     * Отказ открытия — штатный сценарий (`FR-9`): экран возвращается к списку
+     * документов папки с текстом `userMessage`; если и папка не перечислилась,
+     * её отказ главнее — пользователю предлагается выбрать папку заново.
+     * Если при этом уже открыт другой документ, он остаётся на экране
+     * нетронутым — терять рабочий документ из-за неудачной попытки нельзя.
      */
     fun open(source: DocumentSource, keepField: Boolean = false) {
         scope.launch {
@@ -134,10 +186,30 @@ class EditorScreenModel(
                 is DocumentOpenResult.Opened -> attach(result.document, keepField)
                 is DocumentOpenResult.Failed -> {
                     if (document !is EditorDocument.Open) {
-                        document = EditorDocument.OpenFailed(result.error.userMessage(source.displayName))
+                        browseHeldTree(notice = result.error.userMessage(source.displayName))
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Документы удержанного дерева — наблюдаемым состоянием.
+     *
+     * Отказ перечисления показывается сообщением о *папке*, даже когда сюда
+     * привёл отказ открытия файла ([notice] при этом уступает): не читается
+     * папка целиком, и чинить надо её.
+     */
+    private suspend fun browseHeldTree(notice: String? = null) {
+        val tree = access.heldTree()
+        if (tree == null) {
+            document = EditorDocument.NoFolder
+            return
+        }
+        document = when (val result = access.listDocuments()) {
+            is TreeListResult.Listed -> EditorDocument.Browsing(tree, result.documents, notice)
+            is TreeListResult.Failed ->
+                EditorDocument.FolderFailed(result.error.userMessage(result.tree.displayName))
         }
     }
 
@@ -184,17 +256,54 @@ class EditorScreenModel(
         (document as? EditorDocument.Open)?.preview?.retryRequested()
     }
 
+    /** Кнопка «Повторить» на плашке отказа записи — второй способ снять паузу `FR-19` фичи 004. */
+    fun retryWriteRequested() {
+        (document as? EditorDocument.Open)?.runner?.retryRequested()
+    }
+
+    /** Приложение на переднем плане — для записи при уходе в фон. */
+    private var foreground = true
+
+    /**
+     * Приложение ушло в фон или вернулось (`FR-11`, `FR-16` фичи 004).
+     *
+     * Уход в фон — немедленная запись: система вправе выгрузить процесс сразу
+     * после этого события, и дожидаться паузы ввода нельзя. Решает политика:
+     * без расхождения с диском записи не будет. Сигнал идемпотентен — хостинг
+     * шлёт значение, а не событие, и рекомпозиция не должна рождать записей.
+     * Видимость превью в фоне гасит отдельный сигнал [previewVisibilityChanged]:
+     * им управляет экран, у которого есть и вкладка, и передний план.
+     */
+    fun foregroundChanged(foreground: Boolean) {
+        if (foreground == this.foreground) return
+        this.foreground = foreground
+        if (!foreground) {
+            (document as? EditorDocument.Open)?.runner?.movedToBackground()
+        }
+    }
+
     private fun attach(opened: DocumentState, keepField: Boolean) {
         documentScope?.cancel()
         val docScope = CoroutineScope(scope.coroutineContext + Job(scope.coroutineContext[Job]))
         documentScope = docScope
 
+        // Плашка отказа — про документ, а не про экран: новый документ
+        // начинается без чужого отказа.
+        writeFailure = null
+
         // Новый исполнитель — новая политика автосохранения (параметр по
         // умолчанию конструктора): экземпляр политики рассчитан ровно на один
-        // документ (FR-8).
+        // документ (FR-8). Шов записи обёрнут наблюдателем: исполнитель отдаёт
+        // политике только факт отказа, а плашке `OQ-3` нужен его текст —
+        // перехват на границе шва даёт текст, не трогая пакет document/.
         val runner = AutosaveRunner(
             initialDocument = opened,
-            access = access,
+            access = WriteObservingAccess(access) { result ->
+                writeFailure = when (result) {
+                    DocumentWriteResult.Written -> null
+                    is DocumentWriteResult.Failed -> result.error.userMessage(result.source.displayName)
+                }
+            },
             scope = docScope,
             clock = clock,
             delayUntil = delayUntil,
@@ -229,4 +338,24 @@ class EditorScreenModel(
         // видимости сразу и рендерит без дебаунса, как при показе вкладки.
         if (previewVisible) preview.previewShown()
     }
+}
+
+/**
+ * Шов записи с наблюдателем исхода — для плашки отказа записи (`OQ-3`).
+ *
+ * [AutosaveRunner] сообщает политике только *факт* отказа; текст
+ * `DocumentWriteError.userMessage` при этом оставался бы внутри шва. Обёртка
+ * перехватывает исход на границе — единственной точке, принадлежащей экрану, —
+ * и не меняет ни исполнителя, ни политику, ни сам шов.
+ *
+ * [onWriteResult] зовётся в корутине исполнителя, то есть в области экрана на
+ * главном потоке — там же, где живёт наблюдаемое состояние holder-а.
+ */
+private class WriteObservingAccess(
+    private val delegate: DocumentFileAccess,
+    private val onWriteResult: (DocumentWriteResult) -> Unit,
+) : DocumentFileAccess by delegate {
+
+    override suspend fun write(source: DocumentSource, fileText: String): DocumentWriteResult =
+        delegate.write(source, fileText).also(onWriteResult)
 }

@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Surface
@@ -42,10 +44,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.olegnyr.adocmobile.document.DocumentEditor
-import io.github.olegnyr.adocmobile.document.DocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentSource
+import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
+import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.preview.AdocPreview
 import io.github.olegnyr.adocmobile.preview.PreviewFailure
+import io.github.olegnyr.adocmobile.preview.PreviewImageSource
 import io.github.olegnyr.adocmobile.preview.PreviewStatus
 import io.github.olegnyr.adocmobile.render.adocRenderer
 import io.github.olegnyr.adocmobile.theme.AdocTheme
@@ -62,35 +66,39 @@ import kotlin.time.Clock
 enum class EditorTab { Editor, Preview }
 
 /**
- * Экран редактора по макету «02» — слайс `SL-1` фичи 005-editor-screen.
+ * Экран редактора по макету «02» — фича 005-editor-screen, слайсы `SL-1`…`SL-3`.
  *
  * App bar с именем файла и состоянием документа, вкладки `РЕДАКТОР` / `ПРЕВЬЮ`,
- * полотно [AdocEditor], пустое состояние с кнопкой открытия (`OQ-1`).
- * Вкладка превью в этом слайсе — заглушка: живой пайплайн подключает `SL-2`.
+ * полотно [AdocEditor], а до открытого документа — путь решения `OQ-1`:
+ * пустое состояние с кнопкой «Открыть папку», затем список `.adoc`-документов
+ * выбранной папки.
  *
  * Экран целиком обёрнут в один [AdocTheme] (`FR-15`) и живёт в `commonMain`
- * (`NFR-2`): платформе остаётся хостинг и системный диалог выбора файла.
+ * (`NFR-2`): платформе остаётся хостинг и системный диалог выбора папки.
  *
  * Единственный `TextFieldState` создаётся здесь через `rememberSaveable` с его
  * `Saver` (`FR-6`, `FR-7`): текст, каретка и история отмены переживают поворот
  * и выгрузку процесса, и этим же экземпляром пользуются подсветка, undo и
  * автосохранение.
  *
- * @param requestDocument платформенный диалог выбора документа: вернуть источник
- * с удержанным правом или `null`, если пользователь передумал. Сейчас это диалог
- * файла; решение владельца — открывать папку (`OQ-1`), и когда слайс tree-доступа
- * фичи 004 приедет, поменяется ровно эта точка.
+ * @param requestFolder платформенный диалог выбора папки
+ * (`ACTION_OPEN_DOCUMENT_TREE`): вернуть дерево с удержанным правом или `null`,
+ * если пользователь передумал. Файл выбирается уже без платформы — из списка
+ * документов папки.
  * @param foreground приложение на переднем плане. Сигнал подаёт платформенный
  * хостинг (у Compose Multiplatform общего lifecycle-примитива в зависимостях
- * проекта нет): уход в фон гасит видимость превью, и движок молчит (`OQ-5`
- * фичи 003).
+ * проекта нет): уход в фон гасит видимость превью (`OQ-5` фичи 003) и
+ * записывает документ немедленно (`FR-11`).
+ * @param imageSource источник байтов картинок рядом с документом для превью
+ * (`TC-34` фичи 003); реализация — у платформенной половины tree-доступа.
  */
 @Composable
 fun EditorScreen(
-    access: DocumentFileAccess,
-    requestDocument: suspend () -> DocumentSource?,
+    access: DocumentTreeAccess,
+    requestFolder: suspend () -> TreeSource?,
     modifier: Modifier = Modifier,
     foreground: Boolean = true,
+    imageSource: PreviewImageSource? = null,
 ) {
     AdocTheme {
         Surface(
@@ -147,6 +155,17 @@ fun EditorScreen(
                 )
             }
 
+            // Уход в фон — немедленная запись (FR-11): сигнал тоже идемпотентен,
+            // модель реагирует только на смену значения.
+            LaunchedEffect(foreground) { model.foregroundChanged(foreground) }
+
+            // Одно действие «открыть папку» на все три носителя: пустоту,
+            // отказ папки и шапку списка. Отмена диалога — честный null,
+            // состояние экрана не меняется.
+            val openFolder: () -> Unit = {
+                scope.launch { if (requestFolder() != null) model.folderChosen() }
+            }
+
             Column(modifier = Modifier.fillMaxSize()) {
                 // Обе хром-панели на одном фоне chrome; отступ статус-бара
                 // внутри фона, чтобы панель уходила под него (edge-to-edge).
@@ -168,6 +187,13 @@ fun EditorScreen(
                         },
                     )
                     ChromeDivider()
+                }
+
+                // Плашка отказа записи — под app bar, над содержимым, на обеих
+                // вкладках (FR-12, решение OQ-3): молчаливая потеря правок —
+                // единственный непрощаемый отказ, заметность важнее места.
+                model.writeFailure?.let { message ->
+                    WriteFailureBanner(message = message, onRetry = model::retryWriteRequested)
                 }
 
                 Box(modifier = Modifier.weight(1f)) {
@@ -193,6 +219,7 @@ fun EditorScreen(
                             // внутри AdocPreview работает только на живой вью.
                             PreviewPane(
                                 preview = document.preview,
+                                imageSource = imageSource,
                                 onRetry = model::previewRetryRequested,
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -200,14 +227,22 @@ fun EditorScreen(
                             )
                         }
 
-                        EditorDocument.None -> EmptyState(
-                            message = null,
-                            onOpen = { scope.launch { requestDocument()?.let(model::open) } },
+                        EditorDocument.NoFolder -> EmptyState(
+                            label = "ПАПКА НЕ ВЫБРАНА",
+                            message = "Выберите папку с документами AsciiDoc, чтобы начать работу.",
+                            onOpenFolder = openFolder,
                         )
 
-                        is EditorDocument.OpenFailed -> EmptyState(
+                        is EditorDocument.FolderFailed -> EmptyState(
+                            label = "ПАПКА НЕДОСТУПНА",
                             message = document.message,
-                            onOpen = { scope.launch { requestDocument()?.let(model::open) } },
+                            onOpenFolder = openFolder,
+                        )
+
+                        is EditorDocument.Browsing -> FolderDocuments(
+                            browsing = document,
+                            onOpenDocument = model::open,
+                            onOpenFolder = openFolder,
                         )
                     }
                 }
@@ -324,12 +359,15 @@ private fun ChromeDivider() {
 
 /**
  * Пустое состояние — решение `OQ-1`: чертёжный блок в языке дизайна с кнопкой
- * открытия; макета у состояния нет, значения — из готовых токенов и компонентов.
+ * «Открыть папку»; макета у состояния нет, значения — из готовых токенов и
+ * компонентов. Носители: папка не выбрана, папка недоступна, папка без
+ * документов (`FR-1a` фичи 004) — различаются только текстами.
  *
- * @param message текст отказа открытия (`FR-9`) или `null`, когда файла просто нет
+ * @param label служебная метка блока прописными
+ * @param message человеческий текст: подсказка или отказ (`FR-9`, `FR-3` фичи 004)
  */
 @Composable
-private fun EmptyState(message: String?, onOpen: () -> Unit) {
+private fun EmptyState(label: String, message: String, onOpenFolder: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -339,18 +377,121 @@ private fun EmptyState(message: String?, onOpen: () -> Unit) {
     ) {
         AdocBlueprintBlock(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "ФАЙЛ НЕ ОТКРЫТ",
+                text = label,
                 style = adocTextStyle(AdocTypography.sectionLabel),
                 color = AdocTheme.colors.textFaint,
             )
             Text(
-                text = message ?: "Откройте документ AsciiDoc, чтобы начать работу.",
+                text = message,
                 style = adocTextStyle(AdocTypography.body),
                 color = AdocTheme.colors.textSecondary,
                 modifier = Modifier.padding(top = 8.dp, bottom = 14.dp),
             )
-            PrimaryButton(label = "ОТКРЫТЬ ФАЙЛ", onClick = onOpen)
+            PrimaryButton(label = "ОТКРЫТЬ ПАПКУ", onClick = onOpenFolder)
         }
+    }
+}
+
+/**
+ * Список `.adoc`-документов открытой папки — вторая ступень сценария `OQ-1`
+ * («папка, затем файл в ней»).
+ *
+ * Макета у списка нет; строки следуют описанию строки файла экрана «01»
+ * в доступной здесь части: имя файла стилем строки списка, папка в шапке —
+ * моноширинной служебной меткой. Пустая папка — состояние, не ошибка
+ * (`FR-1a` фичи 004), с той же кнопкой смены папки.
+ *
+ * @param onOpenDocument выбор документа — открывает его в редакторе
+ * @param onOpenFolder смена папки тем же системным диалогом
+ */
+@Composable
+private fun FolderDocuments(
+    browsing: EditorDocument.Browsing,
+    onOpenDocument: (DocumentSource) -> Unit,
+    onOpenFolder: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Отказ открытия документа (FR-9): плашка в общем языке, касание убирает.
+        var noticeDismissed by remember(browsing.notice) { mutableStateOf(false) }
+        browsing.notice?.takeUnless { noticeDismissed }?.let { notice ->
+            NoticeBanner(text = notice, onDismiss = { noticeDismissed = true })
+        }
+
+        if (browsing.documents.isEmpty()) {
+            EmptyState(
+                label = "ДОКУМЕНТОВ НЕТ",
+                message = "В папке «${browsing.tree.displayName}» нет файлов .adoc. " +
+                    "Выберите другую папку или добавьте документы в эту.",
+                onOpenFolder = onOpenFolder,
+            )
+            return@Column
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "ПАПКА · ${browsing.tree.displayName}",
+                style = adocTextStyle(AdocTypography.sectionLabel),
+                color = AdocTheme.colors.textFaint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            SecondaryButton(label = "СМЕНИТЬ", onClick = onOpenFolder)
+        }
+        ChromeDivider()
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding(),
+        ) {
+            items(browsing.documents, key = { it.id }) { source ->
+                Text(
+                    text = source.displayName,
+                    style = adocTextStyle(AdocTypography.listItem),
+                    color = AdocTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { onOpenDocument(source) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                )
+                ChromeDivider()
+            }
+        }
+    }
+}
+
+/**
+ * Плашка отказа записи — решение `OQ-3`: та же полоса, что у отказа рендера,
+ * с текстом `DocumentWriteError.userMessage` и кнопкой «Повторить» (ручной
+ * повтор — второй способ снять паузу `FR-19` фичи 004). Несохранённый текст
+ * при этом остаётся в поле (`FR-12`) — плашка живёт до успешной записи.
+ */
+@Composable
+private fun WriteFailureBanner(message: String, onRetry: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().background(AdocTheme.colors.raised)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = message,
+                style = adocTextStyle(AdocTypography.listItem),
+                color = AdocTheme.colors.textSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            SecondaryButton(label = "ПОВТОРИТЬ", onClick = onRetry)
+        }
+        ChromeDivider()
     }
 }
 
@@ -392,6 +533,7 @@ private fun PrimaryButton(label: String, onClick: () -> Unit) {
 @Composable
 private fun PreviewPane(
     preview: PreviewPipeline,
+    imageSource: PreviewImageSource?,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -409,6 +551,7 @@ private fun PreviewPane(
             AdocPreview(
                 html = html,
                 modifier = Modifier.fillMaxSize(),
+                imageSource = imageSource,
                 onDocumentLink = { path -> documentLinkNotice = "Документ не открыт: $path" },
             )
         } else if (preview.status == PreviewStatus.FirstRender) {
