@@ -34,6 +34,8 @@ xref:documentation-rules.adoc[Правила ведения документац
 Решения (ADR)::
 xref:adr/adr-001-toolchain-and-versions.adoc[ADR-001] — инструментальная база и закреплённые версии.
 xref:adr/adr-002-android-first.adoc[ADR-002] — Android-first, iOS отложен.
+xref:adr/adr-003-layout-1a.adoc[ADR-003] — раскладка 1a, превью вкладкой.
+xref:adr/adr-004-document-size-limit.adoc[ADR-004] — заявленный размер документа сужен до ~1000 строк по итогам замеров.
 Проектные решения лежат в `adr/`; решения уровня отдельной фичи — в её каталоге `doc/features/NNN-<slug>/adr/`.
 
 xref:development-rules.adoc[Правила разработки]::
