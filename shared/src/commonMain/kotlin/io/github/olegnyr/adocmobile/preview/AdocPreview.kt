@@ -14,6 +14,15 @@ import androidx.compose.ui.Modifier
  * рендер не должен зависеть от жизненного цикла вью.
  *
  * @param html целая страница, а не фрагмент — результат [previewDocument].
+ * @param imageSource откуда читать локальные изображения документа (`OQ-9`,
+ *   `SL-6`). `null` — изображений нет: каждый их запрос отклоняется, и на месте
+ *   картинки остаётся пустой прямоугольник. Какой именно путь запрашивается,
+ *   решает не платформа, а [resolvePreviewImageRequest]; реализация источника —
+ *   у владельца файлового доступа (поток 4).
  */
 @Composable
-expect fun AdocPreview(html: String, modifier: Modifier = Modifier)
+expect fun AdocPreview(
+    html: String,
+    modifier: Modifier = Modifier,
+    imageSource: PreviewImageSource? = null,
+)
