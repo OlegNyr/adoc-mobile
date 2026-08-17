@@ -16,8 +16,13 @@ import io.github.olegnyr.adocmobile.theme.AdocTheme
  *
  * Базовый URL пустой (`null`): относительные ссылки на файлы документа не должны
  * разрешаться до ответа на `OQ-9`, а поведение ссылок задаёт `SL-5` (`FR-28`).
- * Сохранение прокрутки при обновлении (`FR-23`) — тоже `SL-4`; здесь страница
- * перезагружается целиком, и это видно.
+ *
+ * Обновление сохраняет позицию прокрутки (`FR-23`, `SL-4`): страница заменяется
+ * целиком, но позиция — состояние *превью*, а не страницы. Прокрутка снимается
+ * перед загрузкой и восстанавливается по `postVisualStateCallback` — сигналу
+ * «новая страница уже разложена и готова к отрисовке»; восстанавливать раньше
+ * бессмысленно (высоты ещё нет), позже — видно прыжок. Выход за высоту новой
+ * страницы безопасен: Chromium ограничивает `scrollTo` фактическим диапазоном.
  */
 @Composable
 actual fun AdocPreview(html: String, modifier: Modifier) {
@@ -39,8 +44,22 @@ actual fun AdocPreview(html: String, modifier: Modifier) {
             // Загрузка только при смене содержимого: `update` вызывается на каждую
             // рекомпозицию, а перезагрузка страницы — заметная работа и мигание.
             if (view.tag != html) {
+                val firstLoad = view.tag == null
                 view.tag = html
+                val scrollY = view.scrollY
                 view.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                if (!firstLoad && scrollY > 0) {
+                    // Восстановление именно на перерисовке (TC-21): при первом
+                    // показе восстанавливать нечего, а нулевую позицию не нужно.
+                    view.postVisualStateCallback(
+                        0L,
+                        object : WebView.VisualStateCallback() {
+                            override fun onComplete(requestId: Long) {
+                                view.scrollTo(0, scrollY)
+                            }
+                        },
+                    )
+                }
             }
         },
     )

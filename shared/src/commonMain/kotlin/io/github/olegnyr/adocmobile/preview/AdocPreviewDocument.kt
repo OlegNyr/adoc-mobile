@@ -1,5 +1,6 @@
 package io.github.olegnyr.adocmobile.preview
 
+import io.github.olegnyr.adocmobile.theme.AdocColors
 import io.github.olegnyr.adocmobile.theme.AdocTheme
 
 /**
@@ -31,6 +32,19 @@ import io.github.olegnyr.adocmobile.theme.AdocTheme
  *   функция чистая. Вызывающий, которому нужны гарнитуры дизайна, собирает стиль
  *   сам: `previewStylesheet(colors, previewFontFaces())`.
  */
+/**
+ * Страница превью целиком: фрагмент конвертера + тема + встроенные гарнитуры.
+ *
+ * Шаг сборки страницы в пайплайне живого превью (`SL-4`): результат
+ * `AdocRenderer.render` проходит сюда и готовой страницей уходит в `AdocPreview`.
+ * Suspend только из-за первого чтения шрифтов ([previewFontFaces]); дальше они
+ * приходят из кэша, и сборка стоит одну конкатенацию.
+ */
+suspend fun previewPage(
+    fragment: String,
+    colors: AdocColors = AdocTheme.defaultColors,
+): String = previewDocument(fragment, previewStylesheet(colors, previewFontFaces()))
+
 fun previewDocument(
     fragment: String,
     stylesheet: String = previewStylesheet(AdocTheme.defaultColors),
