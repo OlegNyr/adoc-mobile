@@ -12,7 +12,7 @@ asciidoctor/asciidoctor.js.
 
 Запуск (нужен только при смене версии Asciidoctor.js, в сборку не входит):
 
-    curl -sL -o core.tgz https://registry.npmjs.org/@asciidoctor/core/-/core-4.0.9.tgz
+    curl -sL -o core.tgz https://registry.npmjs.org/@asciidoctor/core/-/core-4.0.10.tgz
     tar xzf core.tgz
     python androidApp/src/debug/tools/patch-asciidoctor.py \
         package/build/browser/index.js \
