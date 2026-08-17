@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
-import io.github.olegnyr.adocmobile.App
+import io.github.olegnyr.adocmobile.android.document.DocumentAccessScreen
 import io.github.olegnyr.adocmobile.render.installAdocRenderer
 
 class MainActivity : ComponentActivity() {
@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Единственное, что рендереру нужно от приложения: доступ к ассетам, где
         // лежит бандл Asciidoctor.js. Контекст берётся приложения, а не активити:
-        // движок живёт столько же, сколько процесс (FR-3), и переживает поворот.
+        // движок живёт столько же, сколько процесс, и переживает поворот.
         installAdocRenderer(applicationContext)
 
         // Стиль системных панелей задан явно тёмным. Без аргументов
@@ -31,11 +31,17 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            // Каркас 002 сверху, сквозной путь рендера снизу. Обе половины
-            // временные: поток 5 заменит их экраном редактора с вкладками.
+            // Временная поверхность из двух половин: сверху файловый доступ
+            // (SL-2 фичи 004, на нём проверяются TC-20, TC-21, TC-23), снизу
+            // сквозной путь рендера (SL-1 фичи 003).
+            //
+            // Каркас темы App() отсюда убран: он своё отработал, тема и шрифты
+            // видны на обеих половинах. Всё это заменит экран редактора из
+            // потока 5 — до него экран собран так, чтобы проверять слайсы, а не
+            // выглядеть продуктом.
             Column(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    App()
+                    DocumentAccessScreen()
                 }
                 RenderSkeleton(modifier = Modifier.fillMaxWidth().weight(1f))
             }
