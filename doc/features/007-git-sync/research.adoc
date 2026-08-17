@@ -1,0 +1,191 @@
+= Разведка — Git-синхронизация
+:feature: 007-git-sync
+:status: done
+:updated: 2026-08-17
+:question: На чём и с какими ограничениями реализуем полный Git-цикл (clone/pull/commit/push) на Android
+:toc: macro
+:toc-title: Содержание
+:sectanchors:
+
+[IMPORTANT]
+Разведка *до* требований. Каждое утверждение — со ссылкой на файл, класс или документ.
+Без ссылки это гипотеза, и она помечается как гипотеза.
+Выводы уходят в ограничения и допущения аналитики и в ADR; требования сюда не пишутся.
+
+toc::[]
+
+== Вопросы разведки
+
+* [x] Q1 — работает ли актуальный JGit (7.x) на Android; какие требования к API level и Java.
+* [x] Q2 — как в JGit устроена авторизация HTTPS-токеном и SSH-ключом; что из этого работает на Android.
+* [x] Q3 — умеет ли JGit shallow clone `depth 1`; что в shallow-репозитории ограничено.
+* [x] Q4 — куда класть клон, чтобы JGit его видел, и как это стыкуется с критерием `US-E5-01` «другие приложения видят те же файлы».
+* [x] Q5 — чем хранить секреты: что случилось с `EncryptedSharedPreferences`, что рекомендует платформа.
+* [x] Q6 — ограничения JGit по памяти и файловым локам, критичные на мобильном устройстве.
+* [x] Q7 — что из нашего кода переиспользуется.
+
+== Как решает эталон
+
+Эталон здесь двухслойный: нативный `git` задаёт контракт поведения, а мобильные приложения с JGit показывают, что из него реально переносится на Android.
+
+[cols="1,2,2,2", options="header"]
+|===
+| Что | Где (класс, файл, документ) | Как устроено | Что берём
+
+| Полный цикл API
+| `org.eclipse.jgit.api.Git`: `CloneCommand`, `PullCommand`, `AddCommand`, `CommitCommand`, `PushCommand`, `StatusCommand` — https://github.com/eclipse-jgit/jgit/wiki/User-Guide[JGit User Guide]
+| Porcelain-API поверх `Repository`; всё работает на `java.io.File`, не на URI
+| Весь цикл фичи ложится на porcelain-API; свой транспортный код не пишем
+
+| SSH-транспорт на Android
+| https://github.com/orgzly/orgzly-android/pull/948[orgzly-android PR #948] (заменён https://github.com/orgzly/orgzly-android/issues/904[#1037], вмержен 2023)
+| JGit + `org.eclipse.jgit.ssh.apache` (Apache MINA sshd); требование API ≥ 26; `known_hosts` — в приватной директории `.ssh` приложения; при новом или сменившемся host key нужен собственный UI подтверждения
+| Прецедент, что MINA sshd работает на Android; паттерн хранения `known_hosts`; необходимость экрана подтверждения host key
+
+| Авторизация HTTPS-токеном
+| https://www.codeaffine.com/2014/12/09/jgit-authentication/[JGit Authentication Explained], https://medium.com/autotrader-engineering/working-with-git-in-java-part-1-a-jgit-tutorial-bc03b404a517[JGit tutorial (Autotrader)]
+| `TransportCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(token, ""))` — PAT передаётся как имя пользователя с пустым паролем; работает для clone, fetch, pull, push
+| Механизм целиком; токен в URL не встраиваем
+
+| Разрешение конфликта «mine / theirs»
+| Контракт `git checkout --ours/--theirs` и маркеры конфликта в файле; выбор варианта — решение видения (xref:../../asciidoc-editor-vision.adoc[видение], раздел «Следующие итерации»)
+| После неуспешного merge JGit оставляет маркеры и стадии в индексе (`Status.getConflicting()`)
+| Участки конфликта читаем из маркеров файла; построчный merge-редактор не делаем
+|===
+
+== Что даёт платформа
+
+[cols="2,1,2,2", options="header"]
+|===
+| API, библиотека или зависимость | Версия | Что умеет | Ограничение
+
+| `org.eclipse.jgit:org.eclipse.jgit`
+| 7.7.1.202607240634-r (июль 2026, https://javadoc.io/doc/org.eclipse.jgit/org.eclipse.jgit/latest/index.html[javadoc.io])
+| Полный Git-цикл на чистой Java
+| С 7.0 требует Java 17 (https://projects.eclipse.org/projects/technology.jgit/releases/7.0.0[релиз 7.0.0]); ветка 6.x — Java 11. Наш стек — JDK 21, проходит
+
+| `java.nio.file` на Android
+| API 26+ (https://developer.android.com/reference/java/nio/file/package-summary[справочник Android])
+| Путь/атрибуты/каналы, на которых построен JGit
+| Наш `minSdk = 26` (`gradle/libs.versions.toml:28`) — совпадает с нижней границей; форки вроде https://github.com/yappy/ajgit[ajgit] существовали именно из-за устройств ниже API 26
+
+| `org.eclipse.jgit.ssh.apache` (Apache MINA sshd)
+| та же линия версий, что JGit; интеграция описана в https://github.com/apache/mina-sshd/blob/master/docs/git.md[mina-sshd/docs/git.md]
+| ed25519, ECDSA-384/521 — современные типы ключей
+| Официальный SSH-транспорт JGit; альтернативный бандл `org.eclipse.jgit.ssh.jsch` объявлен «deprecated, essentially unmaintained, может быть удалён в любой момент» (https://gerrit.googlesource.com/jgit/+/refs/heads/next/org.eclipse.jgit.ssh.jsch/README.md[README бандла]); JSch не умеет ed25519
+
+| Shallow clone в JGit
+| с 6.3 (https://wiki.eclipse.org/JGit/New_and_Noteworthy/6.3[New and Noteworthy 6.3])
+| `CloneCommand`/`FetchCommand`: `setDepth` (`--depth`), `setShallowSince`, `addShallowExclude`
+| Статьи до 2022 года («JGit не умеет shallow») устарели. Поведение push из shallow-клона JGit публично не документировано — гипотеза ниже
+
+| Защищённое хранилище секретов
+| `androidx.security:security-crypto` 1.1.0-alpha07 — все API объявлены deprecated (https://developer.android.com/jetpack/androidx/releases/security[журнал релизов Jetpack Security])
+| —
+| `EncryptedSharedPreferences` больше не рекомендован; официальное направление — платформенные API и прямое использование Android Keystore; типовой паттерн миграции — DataStore + Tink + Keystore (https://www.droidcon.com/2025/12/16/goodbye-encryptedsharedpreferences-a-2026-migration-guide/[обзор droidcon, 2025])
+
+| Память JGit
+| `core.streamFileThreshold`, `WindowCache` (https://gerrit-documentation.storage.googleapis.com/Documentation/3.2.5.1/config-gerrit.html[конфигурация Gerrit/JGit])
+| Порог, выше которого объект стримится, а не грузится массивом; по умолчанию 25 % кучи
+| Известные `OutOfMemoryError` в `WindowCache.load()` на больших репозиториях (https://bugs.eclipse.org/bugs/show_bug.cgi?id=369066[Eclipse bug 369066]); индексные файлы грузятся в память целиком (~2× их размера, https://help.gitkraken.com/git-integration-for-jira-data-center/avoid-outofmemory-exceptions-by-configuring-or-memory-allocation-with-jira-to-accommodate-large-repositories-gij-self-managed/[руководство GitKraken/Jira]) — на мобильной куче это ограничивает размер репозитория
+
+| libgit2 (для будущего iOS)
+| shallow clone поддержан с 1.7.0 (https://github.com/libgit2/libgit2/discussions/6595[анонс v1.7.0])
+| Полный цикл на C, C-interop из Kotlin/Native
+| Паритет по shallow достижим; сам порт — за пределами этой фичи (`T-077`, приостановлен ADR-002)
+|===
+
+Проверено фактом (спайк):: Спайк не проводился.
+Работоспособность актуального JGit 7.x именно на ART (Android Runtime) подтверждена только косвенно — прецедентом orgzly (версии JGit там старше) и совпадением требований к API level.
+Это первый кандидат на спайк фичи — см. гипотезу H1.
+
+Гипотезы (не проверено)::
++
+--
+* *H1.* Стоковый JGit 7.7.x запускается на ART без модификаций при `minSdk 26`.
+Публичного свидетельства для линии 7.x не найдено; известные Android-клиенты сидят на старых версиях.
+Проверяется спайком: clone + commit по `file://`-remote в инструментальном тесте на устройстве.
+* *H2.* Push из shallow-клона `depth 1` через JGit проходит против типовых серверов (GitHub/GitLab).
+Нативный git это допускает, серверные оговорки касаются `receive.shallowUpdate` (https://gitlab.com/gitlab-org/gitlab-foss/-/issues/3033[обсуждение GitLab]); для JGit прямого подтверждения нет.
+Проверяется тем же спайком.
+* *H3.* Первый доступ JGit к репозиторию измеряет разрешение файловых таймстампов (`FileStoreAttributes`) фоновым потоком, что на Android может дать заметную паузу первой операции.
+Источник в документации не закреплён — проверить на устройстве, при подтверждении лечится конфигом.
+* *H4.* Android Keystore не подписывает ed25519, поэтому SSH-ключ нельзя держать в Keystore неизвлекаемым — хранить придётся файл ключа, зашифрованный AES-ключом из Keystore.
+Схема «файл + Keystore-ключ» — стандартный паттерн после деприкации `EncryptedSharedPreferences`; границы поддержки алгоритмов Keystore не проверялись.
+* *H5.* Убийство процесса системой посреди операции оставляет stale-lock (`.git/index.lock`), и следующая операция падает с `LockFailedException`.
+Это общая механика lock-файлов Git; частота на практике и корректный протокол снятия — проверить инструментально.
+--
+
+== Что уже есть у нас
+
+[cols="2,2,2", options="header"]
+|===
+| Наш код | Роль в фиче | Нужна ли доработка
+
+| `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/document/DocumentFileAccess.kt`, `DocumentTreeAccess.kt`
+| Образец тонкого платформенного шва; редактор открывает файлы через него
+| Нужна реализация поверх `java.io.File` для файлов клона: SAF-путь (`content://`) JGit бесполезен, а File-путь дешевле и без SAF
+
+| `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/screen/EditorScreenModel.kt`, `PreviewPipeline.kt`
+| Паттерн модели экрана с корутинами и наблюдаемым состоянием
+| Нет — образец для моделей экранов Git
+
+| `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/ui/AdocBlueprintBlock.kt`
+| Чертёжный блок с метками `+` — карточка ветки и блок прогресса клонирования из макетов 01 и 05
+| Нет — используется как есть
+
+| `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/theme/**`
+| Токены палитры, типографика, сегментированные элементы
+| Возможны мелкие компоненты (чекбокс, toggle) — сверить при вёрстке
+
+| `shared/src/androidDeviceTest/**` (`EngineContractTest`, corpus-тесты)
+| Паттерн инструментальных тестов на устройстве
+| Git-цикл тестируется так же: локальный `file://`-remote, без сети
+|===
+
+Важное уточнение из журналов 003::
+В `doc/features/003-render-preview/progress.adoc` (строка про чтение соседней картинки) вариант «клонированный репозиторий читается без SAF» упомянут как *возможность*, на которую можно отложить проблему, — решением он нигде не зафиксирован.
+Разведка подтверждает физическую основу: JGit работает только с `java.io.File`, поэтому клон обязан лежать там, где у приложения есть прямой файловый доступ.
+Но критерий xref:../../user-stories.adoc#US-E5-01[US-E5-01] «клон кладётся обычной папкой: другие приложения видят те же файлы» с приватным хранилищем *несовместим* — это противоречие, и оно вынесено в открытый вопрос аналитики (OQ-1), а не решено здесь.
+
+== Ограничения и риски, найденные разведкой
+
+* JGit требует прямого файлового доступа (`java.io.File`) → клон не может жить в SAF-дереве пользователя; выбор места хранения — развилка OQ-1, задевающая критерий `US-E5-01`.
+* `minSdk 26` — жёсткий пол для JGit и MINA sshd на Android; наш проект уже на нём, повышать не нужно.
+* JGit 7.x требует Java 17 — сборке это не мешает (JDK 21), но работоспособность на ART не подтверждена (H1) → спайк до реализации.
+* SSH-транспорт фактически безальтернативен: JSch-бандл deprecated и не умеет ed25519 → решение фиксируется xref:adr/adr-001-ssh-transport.adoc[ADR-001].
+* `EncryptedSharedPreferences` deprecated → хранение секретов проектируется на Android Keystore (+ файл/DataStore), выбор конкретной схемы — развилка OQ-2.
+* Память: мобильная куча против `WindowCache` и полного чтения индексных файлов → фича заявляется для репозиториев документации, а не монорепо; `depth 1` — основная митигация объёма; порог размера в требованиях не выдумываем, меряем спайком.
+* Убийство процесса — штатная жизнь Android → протокол обработки stale-lock и незавершённого клона обязан быть в требованиях (H5).
+* Счётчик `↓N` (behind) существует только после fetch — без сетевого обращения он либо нулевой, либо устаревший; периодичность fetch — развилка OQ-5.
+
+== Ответы на вопросы разведки
+
+* *Q1* — да, с оговоркой: линия 7.x (Java 17, наш JDK 21) и `minSdk 26` совместимы по требованиям, но прецедентов 7.x на ART не найдено — спайк H1. Источники: релиз 7.0.0, справочник `java.nio.file`, orgzly PR #948.
+* *Q2* — HTTPS-токен: `UsernamePasswordCredentialsProvider(token, "")`; SSH: `org.eclipse.jgit.ssh.apache` (MINA), работает на Android по прецеденту orgzly; JSch — тупиковая ветка. Нужен UI подтверждения host key.
+* *Q3* — да, с JGit 6.3: `setDepth(1)` на `CloneCommand`/`FetchCommand`. Непроверенное место — push из shallow (H2).
+* *Q4* — только хранилище с прямым File-доступом; совместимость с «другие приложения видят файлы» не решается разведкой — противоречие вынесено в OQ-1 аналитики.
+* *Q5* — `EncryptedSharedPreferences` deprecated (security-crypto 1.1.0-alpha07); направление платформы — Android Keystore напрямую, данные — файл или DataStore, шифрованные ключом из Keystore. Схема — OQ-2, для SSH-ключа см. H4.
+* *Q6* — память ограничивает размер репозитория (WindowCache, индекс в памяти); stale-lock после убийства процесса — H5.
+* *Q7* — швы document-слоя, паттерны моделей экранов, чертёжный блок, паттерн device-тестов; новая работа — File-реализация доступа, сам Git-слой и четыре экрана.
+
+== Источники
+
+* https://github.com/eclipse-jgit/jgit/wiki/User-Guide — JGit User Guide (porcelain-API, `Repository` на `java.io.File`).
+* https://javadoc.io/doc/org.eclipse.jgit/org.eclipse.jgit/latest/index.html — актуальная версия JGit 7.7.1.202607240634-r.
+* https://projects.eclipse.org/projects/technology.jgit/releases/7.0.0 — JGit 7.0: минимальная Java 17.
+* https://wiki.eclipse.org/JGit/New_and_Noteworthy/6.3 — shallow clone/fetch: `setDepth`, `setShallowSince`, `addShallowExclude`.
+* https://developer.android.com/reference/java/nio/file/package-summary — `java.nio.file` доступен с API 26.
+* https://gerrit.googlesource.com/jgit/+/refs/heads/next/org.eclipse.jgit.ssh.jsch/README.md — статус JSch-бандла: deprecated, unmaintained.
+* https://github.com/apache/mina-sshd/blob/master/docs/git.md — интеграция MINA sshd с JGit.
+* https://github.com/orgzly/orgzly-android/pull/948 и https://github.com/orgzly/orgzly-android/issues/904 — прецедент MINA sshd на Android: API ≥ 26, `known_hosts`, host key UI.
+* https://www.codeaffine.com/2014/12/09/jgit-authentication/ — механика `CredentialsProvider` и SSH-фабрик.
+* https://medium.com/autotrader-engineering/working-with-git-in-java-part-1-a-jgit-tutorial-bc03b404a517 — PAT как имя пользователя с пустым паролем.
+* https://developer.android.com/jetpack/androidx/releases/security — деприкация всех API `security-crypto` в 1.1.0-alpha07.
+* https://www.droidcon.com/2025/12/16/goodbye-encryptedsharedpreferences-a-2026-migration-guide/ — паттерн миграции: DataStore + Tink + Keystore.
+* https://bugs.eclipse.org/bugs/show_bug.cgi?id=369066 — OOM в `WindowCache` при клоне большого репозитория.
+* https://gerrit-documentation.storage.googleapis.com/Documentation/3.2.5.1/config-gerrit.html — `core.streamFileThreshold` и его дефолт.
+* https://help.gitkraken.com/git-integration-for-jira-data-center/avoid-outofmemory-exceptions-by-configuring-or-memory-allocation-with-jira-to-accommodate-large-repositories-gij-self-managed/ — индексные файлы в памяти ~2× размера.
+* https://gitlab.com/gitlab-org/gitlab-foss/-/issues/3033 — push из shallow и `receive.shallowUpdate`.
+* https://github.com/libgit2/libgit2/discussions/6595 — libgit2 1.7.0: shallow clone для будущей iOS-ветки.
+* https://github.com/yappy/ajgit — форк JGit под Android API 26+ (свидетельство пола по API level).
