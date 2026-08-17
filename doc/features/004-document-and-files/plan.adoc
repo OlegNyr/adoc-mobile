@@ -103,7 +103,7 @@ toc::[]
 | `AutosaveRunner` отдаёт `DocumentWriteError` наружу: тип ошибки доезжает до экрана штатно, обёртка `WriteObservingAccess` в зоне экрана удаляется
 | чистота шва `FR-16`/`FR-19`; поведение не меняется — стражи те же
 | SL-6; журналы 004 SL-6 и 005 SL-3 (запись о долге)
-| {st-todo}
+| {st-done}
 |===
 
 Статусы: {st-todo} · {st-wip} · {st-done} · {st-hold} · {st-drop}
