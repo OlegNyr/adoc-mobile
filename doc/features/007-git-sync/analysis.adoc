@@ -416,7 +416,7 @@ TC-33 (happy, device):: Git-операции не исполняются на г
 Типы JGit не пересекают границу `commonMain`; секреты не попадают в `SharedPreferences`, файлы настроек и логи; никакого фонового исполнения операций; конфликт первой версии — только «локальное / удалённое / оба»; iOS-реализация не пишется, но интерфейс не должен опираться на JVM-типы.
 
 Связанные ADR::
-xref:adr/adr-001-ssh-transport.adoc[ADR-001 — SSH-транспорт: Apache MINA sshd, не JSch].
+xref:../../adr/adr-007-ssh-transport.adoc[ADR-001 — SSH-транспорт: Apache MINA sshd, не JSch].
 
 == Матрица трассируемости
 
@@ -478,6 +478,6 @@ JGit требует прямого File-доступа (разведка, Q4), �
 
 * План работ: xref:plan.adoc[plan.adoc] · Журнал: xref:progress.adoc[progress.adoc]
 * Разведка: xref:research.adoc[research.adoc]
-* ADR: xref:adr/adr-001-ssh-transport.adoc[ADR-001 — SSH-транспорт]
+* ADR: xref:../../adr/adr-007-ssh-transport.adoc[ADR-001 — SSH-транспорт]
 * Истории: xref:../../user-stories.adoc[эпик E5, US-E1-04] · Макеты: xref:../../design/design.adoc[экраны 01, 03, 04, 05]
 * Смежные фичи: xref:../004-document-and-files/analysis.adoc[004 — документ и файлы], xref:../003-render-preview/analysis.adoc[003 — рендер и превью]

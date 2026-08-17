@@ -1,4 +1,4 @@
-= ADR-001: SSH-транспорт — Apache MINA sshd
+= ADR-007: SSH-транспорт — Apache MINA sshd
 // adr-status: proposed | accepted | superseded
 :adr-status: proposed
 :date: 2026-08-17
