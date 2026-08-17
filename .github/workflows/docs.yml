@@ -61,16 +61,20 @@ jobs:
           mkdir -p build/docs
           rsync -a --exclude 'project/' doc/ build/docs/
 
+      # Перечисление каталогов заменено обходом дерева: список отставал от
+      # репозитория, и документация фич (doc/features/**) в сборку не попадала
+      # вовсе. Найдено при работе над потоком 3; чинится один раз и навсегда,
+      # потому что новый каталог теперь подхватывается сам.
       - name: Сборка с падением на предупреждениях
         run: |
+          mapfile -t docs < <(find build/docs -name '*.adoc' -not -path '*/project/*' | sort)
+          test ${#docs[@]} -gt 0
+          echo "Собираем ${#docs[@]} документов"
           asciidoctor \
             --require asciidoctor-diagram \
             --failure-level=WARN \
             --attribute attribute-missing=warn \
-            build/docs/*.adoc \
-            build/docs/adr/*.adoc \
-            build/docs/research/*.adoc \
-            build/docs/design/*.adoc
+            "${docs[@]}"
 
       # Страховка от молчаливой деградации: asciidoctor-diagram умеет
       # не упасть, но и не отрисовать.
