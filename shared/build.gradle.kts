@@ -314,6 +314,16 @@ kotlin {
         // Без этого commonTest не во что компилировать на Android.
         withHostTestBuilder {}.configure {}
 
+        // Инструментальный прогон на устройстве (ADR-006): engine-кейсы фичи 003,
+        // корпус сверки, перф-пороги. Source set называется androidDeviceTest —
+        // имя фиксировано плагином (androidInstrumentedTest — имя из старого мира
+        // KMP+AGP<9, здесь его нет). commonTest сюда не входит намеренно
+        // (sourceSetTreeName по умолчанию null): его дом — быстрый host-прогон,
+        // гонять его на устройстве значит платить устройством за уже покрытое.
+        withDeviceTestBuilder {}.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
+
         // Ресурсы Android в новом плагине тоже выключены по умолчанию.
         // Без этого шрифты из composeResources не попадают в APK, и приложение
         // молча рисует системным шрифтом.
@@ -349,6 +359,24 @@ kotlin {
             // QuickJS, поэтому объявлен implementation: приложению видеть его
             // незачем, оно работает через контракт AdocRenderer.
             implementation(libs.quickjs.kt)
+        }
+        getByName("androidDeviceTest").dependencies {
+            // kotlin("test") на Android-таргете разворачивается в kotlin-test-junit,
+            // JUnit 4 приезжает с ним; runner добавляет AndroidJUnitRunner и
+            // InstrumentationRegistry (через транзитивный monitor).
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.runner)
+        }
+    }
+}
+
+// Корпус сверки уезжает в ассеты инструментального APK из своего родного
+// каталога, а не копией в src: вторая копия разъехалась бы с первой молча.
+// Статический каталог, не задача: содержимое корпуса меняется только руками.
+androidComponents {
+    onVariants { variant ->
+        variant.deviceTests.values.forEach { deviceTest ->
+            deviceTest.sources.assets?.addStaticSourceDirectory("../testdata/render-corpus")
         }
     }
 }

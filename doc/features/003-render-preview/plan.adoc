@@ -1,7 +1,7 @@
 = План работ — рендер и превью
 :feature: 003-render-preview
 // plan-status: draft | active | done
-:plan-status: active
+:plan-status: done
 :updated: 2026-08-17
 :horizon: детально спланирован этап E1; E2 — крупными мазками, уточняется после закрытия E1 и ответов на открытые вопросы
 :toc: macro
@@ -71,7 +71,7 @@ toc::[]
 | Корпус сравнения с десктопным Asciidoctor: перечень расхождений и выбранная версия ядра
 | FR-8, FR-12, FR-29…FR-31; TC-7, TC-25…TC-27
 | SL-1
-| {st-todo}
+| {st-done}
 
 | SL-6
 | E2

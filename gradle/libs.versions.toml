@@ -18,6 +18,10 @@ androidxActivityCompose = "1.13.0"
 androidxCoreKtx = "1.19.0"
 androidxLifecycle = "2.11.0"
 
+# Инструментальный прогон на устройстве (ADR-006): только раннер — прочее
+# (JUnit 4, InstrumentationRegistry из monitor) приезжает транзитивно.
+androidxTestRunner = "1.7.0"
+
 # Android SDK. compileSdk 37 — максимум, поддерживаемый AGP 9.3.
 compileSdk = "37"
 targetSdk = "37"
@@ -38,6 +42,7 @@ quickjs-kt = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjs" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivityCompose" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCoreKtx" }
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
