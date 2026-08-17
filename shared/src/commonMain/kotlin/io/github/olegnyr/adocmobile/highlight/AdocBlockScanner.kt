@@ -14,9 +14,14 @@ package io.github.olegnyr.adocmobile.highlight
  * которого зависит, распознаётся ли строчная конструкция вообще, и маскарад
  * блока (`FR-5`) — метку стиля над ограничителем, меняющую тип блока.
  *
- * Чего здесь нет и не должно появиться: инлайн-разбора и макросов — это слайсы
- * `SL-3` и `SL-4`. Обычная строка не получает ни одного диапазона намеренно, а
- * не потому, что до неё не дошли руки.
+ * `SL-3` добавил инлайн-разбор (`FR-17`…`FR-20`): автомат копит *логическую
+ * строку блока* — смежные непустые строки абзаца, пункта списка или описания
+ * определения — и на её границе запускает [AdocInlineScanner]. Границей служат
+ * пустая строка, ограничитель, метаданные, новый пункт списка и продолжение
+ * пункта `+`; строчный комментарий и директива препроцессора прозрачны — абзац
+ * склеивается через них, как это делает препроцессор эталона.
+ *
+ * Чего здесь нет и не должно появиться: макросов и ссылок — это слайс `SL-4`.
  *
  * Спорные места сняты прогоном эталонного Asciidoctor 2.0.26 от 2026-08-17, как
  * требуют границы работ фичи, — документация языка их не описывает:
@@ -46,6 +51,7 @@ object AdocBlockScanner {
         var insideList = false
         var pendingStyle: String? = null
         var attributeContinues = false
+        val inline = InlineAccumulator(source, spans)
 
         forEachLine(source) { lineStart, lineEnd ->
             val line = source.substring(lineStart, lineEnd)
@@ -68,6 +74,7 @@ object AdocBlockScanner {
                 // В составном блоке и вне блоков ограничитель либо закрывает
                 // текущий блок, либо открывает новый — вложенный.
                 delimiter != null -> {
+                    inline.flush()
                     spans += AdocSpan(AdocRange(lineStart, lineEnd), AdocStyle.BlockDelimiter)
                     if (open != null && delimiter.closes(open)) {
                         stack.removeAt(stack.lastIndex)
@@ -78,6 +85,17 @@ object AdocBlockScanner {
                     attributeContinues = false
                     previousRole = AdocLineRole.Boundary
                     insideList = false
+                }
+
+                // Продолжение пункта списка: `+` на отдельной строке присоединяет
+                // к пункту следующий блок. Для строчного состояния строка ведёт
+                // себя как обычный текст, но логическую строку инлайн-разбора
+                // обрывает — прогон эталона показал, что пара форматирования
+                // через продолжение не работает (`FR-17`).
+                line == LIST_CONTINUATION && insideList && !attributeContinues -> {
+                    inline.flush()
+                    pendingStyle = null
+                    previousRole = AdocLineRole.Text
                 }
 
                 else -> {
@@ -110,6 +128,23 @@ object AdocBlockScanner {
                         AdocLineRole.Text, AdocLineRole.Transparent -> insideList
                         else -> false
                     }
+                    // Границы логической строки блока (`FR-17`): новый пункт
+                    // списка начинает свою, текст продолжает текущую, прозрачная
+                    // строка не попадает в текст, но и не обрывает его; всё
+                    // остальное — граница.
+                    when (result.role) {
+                        AdocLineRole.ListItem -> {
+                            inline.flush()
+                            result.inlineContentStart?.let { inline.append(lineStart + it, lineEnd) }
+                        }
+
+                        AdocLineRole.Text ->
+                            result.inlineContentStart?.let { inline.append(lineStart + it, lineEnd) }
+
+                        AdocLineRole.Transparent -> Unit
+
+                        else -> inline.flush()
+                    }
                     // Комментарий и директива препроцессора снимаются до разбора
                     // структуры: абзац склеивается через них, состояние не меняется.
                     if (result.role != AdocLineRole.Transparent) previousRole = result.role
@@ -118,6 +153,13 @@ object AdocBlockScanner {
 
             blockStates += stack.toList()
         }
+        inline.flush()
+
+        // Диапазоны разных проходов рождаются не по порядку: инлайн-спан абзаца
+        // появляется на его границе, позже спанов следующей строки. Сортировка
+        // восстанавливает контракт [AdocScan]: по началу, при совпадении начал
+        // первым идёт более широкий диапазон.
+        spans.sortWith(compareBy({ it.range.start }, { -it.range.length }))
 
         return AdocScan(spans = spans, blockStates = blockStates)
     }
@@ -327,9 +369,66 @@ object AdocBlockScanner {
     }
 
     private const val INCLUDE_DIRECTIVE = "include::"
+    private const val LIST_CONTINUATION = "+"
     private const val TABLE_PREFIX = '|'
     private const val MIN_DELIMITER_LENGTH = 2
     private const val MIN_TABLE_LENGTH = 4
     private const val MIN_RUN_LENGTH = 4
     private const val OPEN_DELIMITER_LENGTH = 2
+}
+
+/**
+ * Копилка логической строки блока (`FR-17`) — единицы инлайн-разбора.
+ *
+ * Смежные непустые строки абзаца, пункта списка или описания определения
+ * складываются сюда сегментами исходника, а на границе логической строки
+ * [flush] склеивает их через `\n`, прогоняет [AdocInlineScanner] и переводит
+ * его диапазоны обратно в смещения исходника. Диапазон пары, пересёкшей перевод
+ * строки, получается непрерывным по исходнику — включая строку комментария,
+ * если абзац склеился через неё: у той остаётся и собственная роль.
+ */
+private class InlineAccumulator(
+    private val source: String,
+    private val spans: MutableList<AdocSpan>,
+) {
+    private val segmentStarts = mutableListOf<Int>()
+    private val segmentEnds = mutableListOf<Int>()
+
+    /** Добавляет текст строки; пустой хвост — маркер без текста — не хранится. */
+    fun append(start: Int, endExclusive: Int) {
+        if (start < endExclusive) {
+            segmentStarts += start
+            segmentEnds += endExclusive
+        }
+    }
+
+    /** Завершает логическую строку: инлайн-проход и очистка копилки. */
+    fun flush() {
+        if (segmentStarts.isEmpty()) return
+
+        var length = segmentStarts.size - 1
+        for (k in segmentStarts.indices) length += segmentEnds[k] - segmentStarts[k]
+
+        // Карта смещений возвращает каждому символу склейки его позицию в
+        // исходнике: диапазоны считаются по исходному тексту (`FR-20`, `FR-24`),
+        // даже когда сегменты не смежны из-за прозрачной строки между ними.
+        val map = IntArray(length)
+        val text = StringBuilder(length)
+        for (k in segmentStarts.indices) {
+            if (k > 0) {
+                map[text.length] = segmentEnds[k - 1]
+                text.append('\n')
+            }
+            for (position in segmentStarts[k] until segmentEnds[k]) {
+                map[text.length] = position
+                text.append(source[position])
+            }
+        }
+
+        AdocInlineScanner.scan(text.toString()) { from, toExclusive, style ->
+            spans += AdocSpan(AdocRange(map[from], map[toExclusive - 1] + 1), style)
+        }
+        segmentStarts.clear()
+        segmentEnds.clear()
+    }
 }

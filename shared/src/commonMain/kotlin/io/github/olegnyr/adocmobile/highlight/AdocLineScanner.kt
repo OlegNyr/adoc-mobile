@@ -41,6 +41,13 @@ internal data class AdocLineResult(
     val blockStyle: String? = null,
     /** Значение атрибута оборвано слэшем и продолжается на следующей строке (`FR-9`). */
     val attributeContinues: Boolean = false,
+    /**
+     * Смещение в строке, с которого начинается текст логической строки блока для
+     * инлайн-разбора `SL-3`, или `null`, если инлайн-текста в строке нет.
+     * У абзаца это 0, у пункта списка — позиция за пробелом после маркера, у
+     * admonition — за меткой; заголовки, атрибуты и метаданные текста не отдают.
+     */
+    val inlineContentStart: Int? = null,
 )
 
 /**
@@ -161,19 +168,25 @@ internal object AdocLineScanner {
         if (context.atBlockStart || context.insideList) {
             listMarker(line)?.let { (from, to) ->
                 spans += AdocSpan(AdocRange(offset + from, offset + to), AdocStyle.ListMarker)
-                return AdocLineResult(AdocLineRole.ListItem)
+                // За маркером обязан идти пробел; текст пункта — после него.
+                return AdocLineResult(AdocLineRole.ListItem, inlineContentStart = to + 1)
             }
             definitionListSeparator(line)?.let { (from, to) ->
                 spans += AdocSpan(AdocRange(offset, offset + from), AdocStyle.ListTerm)
                 spans += AdocSpan(AdocRange(offset + from, offset + to), AdocStyle.ListMarker)
-                return AdocLineResult(AdocLineRole.ListItem)
+                return AdocLineResult(
+                    role = AdocLineRole.ListItem,
+                    // Описание на той же строке начинается за пробелом после
+                    // разделителя; `Термин::` без описания текста не отдаёт.
+                    inlineContentStart = if (to < line.length) to + 1 else null,
+                )
             }
         }
 
         if (context.atBlockStart) {
             admonitionLabelLength(line)?.let { length ->
                 spans += AdocSpan(AdocRange(offset, offset + length), AdocStyle.Admonition)
-                return AdocLineResult(AdocLineRole.Text)
+                return AdocLineResult(AdocLineRole.Text, inlineContentStart = length + 1)
             }
         }
 
@@ -186,7 +199,7 @@ internal object AdocLineScanner {
             return AdocLineResult(AdocLineRole.Literal)
         }
 
-        return AdocLineResult(AdocLineRole.Text)
+        return AdocLineResult(AdocLineRole.Text, inlineContentStart = 0)
     }
 
     // region конструкции

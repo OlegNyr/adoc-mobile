@@ -85,6 +85,29 @@ class AdocHighlightStyles(colors: AdocColors) {
                 // Разрывы — структурные линии, как разделители блоков.
                 AdocStyle.ThematicBreak, AdocStyle.PageBreak ->
                     SpanStyle(color = colors.comment, fontWeight = FontWeight.Bold)
+
+                // Инлайн-роли слайса SL-3. Полужирный и курсив показываются
+                // собственным начертанием — это честнее любого цвета: разметка
+                // выглядит тем, что она делает.
+                AdocStyle.Bold -> SpanStyle(fontWeight = FontWeight.Bold)
+                AdocStyle.Italic -> SpanStyle(fontStyle = FontStyle.Italic)
+
+                // Моноширинный фрагмент — тот же смысл, что дословный блок:
+                // фон raised без смены цвета текста.
+                AdocStyle.Monospace -> SpanStyle(background = colors.raised)
+
+                // Выделение — фон роли выделения текста; единственная роль
+                // палитры, означающая «подсвечено».
+                AdocStyle.Highlight -> SpanStyle(background = colors.accentSelection)
+
+                // Passthrough — «здесь разметка не действует»: приглушённый
+                // цвет говорит, что сканер видит конструкцию, но не толкует её.
+                AdocStyle.InlinePassthrough -> SpanStyle(color = colors.textMuted)
+
+                // Над- и подстрочный — служебная запись; курсив отделяет от
+                // обычного текста, приглушённый цвет — от акцентных ролей.
+                AdocStyle.Superscript, AdocStyle.Subscript ->
+                    SpanStyle(color = colors.textMuted, fontStyle = FontStyle.Italic)
             }
         }
 
