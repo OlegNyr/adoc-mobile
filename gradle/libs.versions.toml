@@ -1,0 +1,44 @@
+# Единственное место, где живут версии. Обоснование выбора — doc/adr/adr-001-toolchain-and-versions.adoc.
+# Только релизные версии: alpha, beta, RC и ночные сборки не берём.
+
+[versions]
+kotlin = "2.4.10"
+agp = "9.3.1"
+composeMultiplatform = "1.11.1"
+# material3 в Compose Multiplatform идёт отдельной версионной линией и отстаёт от
+# runtime/foundation/ui. Из-за этого сокращения compose.* объявлены устаревшими:
+# они не могут вывести версию. Координаты задаём явно.
+composeMaterial3 = "1.9.0"
+
+androidxActivityCompose = "1.13.0"
+androidxCoreKtx = "1.19.0"
+androidxLifecycle = "2.11.0"
+
+# Android SDK. compileSdk 37 — максимум, поддерживаемый AGP 9.3.
+compileSdk = "37"
+targetSdk = "37"
+minSdk = "26"
+
+# JVM-таргет: AGP 9.3 требует JDK не ниже 17.
+jvmTarget = "17"
+
+[libraries]
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMaterial3" }
+
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivityCompose" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCoreKtx" }
+androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+
+[plugins]
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+# org.jetbrains.kotlin.android намеренно отсутствует: с AGP 9.0 поддержка Kotlin
+# встроена в AGP, а отдельный плагин вызывает ошибку применения.
+kotlinCompose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+# Для KMP-модуля нужен именно этот плагин: с AGP 9.0 com.android.library
+# несовместим с org.jetbrains.kotlin.multiplatform.
+androidKmpLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

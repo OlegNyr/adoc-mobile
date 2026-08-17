@@ -2,9 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Build
+
+```bash
+./gradlew build          # compiles both modules, runs commonTest, assembles APKs
+./gradlew :shared:allTests   # shared-module tests only
+./gradlew :androidApp:assembleDebug
+```
+
+**`JAVA_HOME` must point at a JDK 17+ when running Gradle.** On this machine `java` on `PATH` resolves to JRE 1.8 while `JAVA_HOME` is Azul 21 — the wrapper honours `JAVA_HOME`, but tools that read `PATH` (e.g. `sdkmanager`) break. `local.properties` holds `sdk.dir` and is gitignored; write paths with forward slashes, since a backslash is an escape character in Java properties files.
+
+Modules: `shared` (KMP, `commonMain`/`commonTest`/`androidMain`) and `androidApp` (Android application). Versions live only in `gradle/libs.versions.toml`.
+
+### AGP 9 traps, all learned the hard way
+
+Every one of these produced a build failure during scaffolding, and none matches pre-AGP-9 habits:
+
+- **Do not apply `org.jetbrains.kotlin.android`** — Kotlin is built into AGP 9; applying it fails the build.
+- **`com.android.library` is incompatible with the KMP plugin.** A KMP module uses `com.android.kotlin.multiplatform.library`, configured inside `kotlin { android { … } }` — there is no top-level `android { }` block, and `androidLibrary { }` is already deprecated in favour of `android { }`.
+- **`kotlinOptions` does not exist** in the new DSL. Use `compileOptions` for Java level, and `compilerOptions { }` (a lambda, not `.configure { }`) inside `kotlin { android { } }`.
+- **Tests are off by default** in the KMP library plugin. Without `withHostTestBuilder {}.configure {}` the `commonTest` source set silently compiles to nothing.
+- **`compose.material3` and friends are deprecated shortcuts.** `material3` ships on its own version line (1.9.0) behind runtime/foundation/ui (1.11.1), so coordinates are spelled out in the catalog.
+
 ## Current state
 
-This directory holds **no source code yet** — only the documentation in `doc/`:
+Scaffolding (`T-003`) is done: the project builds and the smoke test passes. No product code yet — the documentation in `doc/` defines what gets built:
 
 - `doc/README.adoc` — documentation map and reading order.
 - `doc/asciidoc-editor-vision.adoc` — product vision. The authority on scope, architecture and rejected alternatives.
