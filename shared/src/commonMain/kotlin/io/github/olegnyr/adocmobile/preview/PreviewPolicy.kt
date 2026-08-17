@@ -64,7 +64,31 @@ sealed interface PreviewUpdate {
      * рендер был прерван. В превью не попадает (`FR-15`, `TC-12`).
      */
     data object Stale : PreviewUpdate
+
+    /**
+     * Актуальный рендер отказал (`FR-9`, `OQ-2`): показать плашку [failure],
+     * не трогая последний удачный HTML. То же состояние доступно через
+     * [PreviewPolicy.failure], пока его не снимет удачный рендер.
+     */
+    data class Failed(val failure: PreviewFailure) : PreviewUpdate
 }
+
+/**
+ * Отказ рендера в формах, пригодных каждая для своего адресата, — решение `OQ-2`
+ * и NFR безопасности. Все три текста строятся *без* сообщения исключения:
+ * движок цитирует в сообщениях исходник, а содержимое документа не имеет права
+ * попасть ни в UI, ни в лог — никогда (`TC-29`).
+ */
+data class PreviewFailure(
+    /** Плашка пользователю: человеческий текст, одинаковый для всех отказов. */
+    val userMessage: String,
+
+    /** По касанию на плашке: тип отказа — то, что можно приложить к баг-репорту. */
+    val technicalDetail: String,
+
+    /** Диагностическая запись: признак отказа и размер документа, не текст (`TC-29`). */
+    val logRecord: String,
+)
 
 /**
  * Состояние превью для показа пользователю — решение `OQ-1`.
@@ -116,6 +140,17 @@ class PreviewPolicy(private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS) 
 
     /** Последний опубликованный HTML; `null` — публиковать было нечего. */
     var html: String? = null
+        private set
+
+    /**
+     * Отказ актуального рендера; `null` — плашки нет.
+     *
+     * Появляется в [renderFailed], снимается удачной публикацией. Пока плашка
+     * висит, [html] продолжает показываться (`OQ-2`): работа не прерывается.
+     * Если отказал самый первый рендер, показывать нечего — [html] `null`,
+     * и UI ставит плашку с повтором на место индикатора.
+     */
+    var failure: PreviewFailure? = null
         private set
 
     /** Исходник, которому соответствует [html]. */
@@ -231,7 +266,51 @@ class PreviewPolicy(private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS) 
         publishedSource = inFlightSource
         inFlightSource = null
         html = renderedHtml
+        failure = null
         return PreviewUpdate.Publish(renderedHtml)
+    }
+
+    /**
+     * Рендер поколения [generation] отказал: исключение движка, таймаут,
+     * переполнение стека (`FR-9`, `FR-11`).
+     *
+     * Отказ *актуального* рендера поднимает плашку; отказ прерванного —
+     * такой же устаревший исход, как его результат: актуальный рендер либо
+     * уже идёт, либо будет запущен правкой, и пугать пользователя нечем.
+     *
+     * Отмена корутины отказом не является и сюда не передаётся: прерванный
+     * рендер — штатная работа пайплайна (`FR-10`), а не сбой.
+     *
+     * Тексты строятся только из типа причины и размера исходника: сообщение
+     * исключения может цитировать документ, и его не читает даже лог (`TC-29`).
+     */
+    fun renderFailed(generation: Int, cause: Throwable): PreviewUpdate {
+        if (generation != inFlight) return PreviewUpdate.Stale
+        inFlight = null
+        val sourceLength = inFlightSource?.length ?: 0
+        inFlightSource = null
+
+        val kind = cause::class.simpleName ?: "Unknown"
+        val raised = PreviewFailure(
+            userMessage = STALE_BANNER_TEXT,
+            technicalDetail = kind,
+            logRecord = "render failed · cause=$kind · sourceLength=$sourceLength",
+        )
+        failure = raised
+        return PreviewUpdate.Failed(raised)
+    }
+
+    /**
+     * Кнопка повтора на плашке: рендер сразу, без дебаунса — явное действие
+     * пользователя, как переключение вкладки (`OQ-2`, `OQ-4`).
+     *
+     * Рендерится и неизменённый текст: пользователь попросил повторить, и
+     * молчание в ответ выглядело бы как сломанная кнопка.
+     */
+    fun retryRequested(source: String, now: Long): PreviewAction {
+        if (!visible) return PreviewAction.Idle
+        dueAt = null
+        return startRender(source)
     }
 
     /** Начать рендер нового поколения; предыдущий этим же действием прерывается. */
@@ -245,5 +324,13 @@ class PreviewPolicy(private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS) 
     companion object {
         /** Пауза ввода по умолчанию — `FR-13`. */
         const val DEFAULT_DEBOUNCE_MILLIS: Long = 300
+
+        /**
+         * Текст плашки — решение `OQ-2`: человеческий, об устаревании, без
+         * внутренностей. Живёт в общем коде: это поведение продукта, и второй
+         * платформе он достанется тем же.
+         */
+        const val STALE_BANNER_TEXT: String =
+            "Превью устарело: последнее обновление не удалось. Повторите попытку."
     }
 }

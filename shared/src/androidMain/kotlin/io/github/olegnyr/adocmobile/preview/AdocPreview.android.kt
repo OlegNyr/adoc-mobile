@@ -1,5 +1,8 @@
 package io.github.olegnyr.adocmobile.preview
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -33,7 +36,12 @@ import java.io.ByteArrayInputStream
  * страницы безопасен: Chromium ограничивает `scrollTo` фактическим диапазоном.
  */
 @Composable
-actual fun AdocPreview(html: String, modifier: Modifier, imageSource: PreviewImageSource?) {
+actual fun AdocPreview(
+    html: String,
+    modifier: Modifier,
+    imageSource: PreviewImageSource?,
+    onDocumentLink: (String) -> Unit,
+) {
     // Фон роли ground у самой вью, а не только в CSS страницы (FR-20, TC-22):
     // WebView до конца загрузки первой страницы и между загрузками рисует
     // собственный фон, по умолчанию белый, — это и есть та самая вспышка.
@@ -50,13 +58,16 @@ actual fun AdocPreview(html: String, modifier: Modifier, imageSource: PreviewIma
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
                 setBackgroundColor(ground)
-                webViewClient = PreviewWebViewClient(imageSource)
+                webViewClient = PreviewWebViewClient(imageSource, onDocumentLink)
             }
         },
         update = { view ->
-            // Источник обновляется и на рекомпозиции без смены HTML: документ
-            // тот же, а доступ к файлам мог появиться или пропасть.
-            (view.webViewClient as? PreviewWebViewClient)?.imageSource = imageSource
+            // Источник и слушатель обновляются и на рекомпозиции без смены HTML:
+            // документ тот же, а лямбды экрана могли пересоздаться.
+            (view.webViewClient as? PreviewWebViewClient)?.let { client ->
+                client.imageSource = imageSource
+                client.onDocumentLink = onDocumentLink
+            }
 
             // Загрузка только при смене содержимого: `update` вызывается на каждую
             // рекомпозицию, а перезагрузка страницы — заметная работа и мигание.
@@ -100,6 +111,7 @@ actual fun AdocPreview(html: String, modifier: Modifier, imageSource: PreviewIma
  */
 private class PreviewWebViewClient(
     @Volatile var imageSource: PreviewImageSource?,
+    @Volatile var onDocumentLink: (String) -> Unit,
 ) : WebViewClient() {
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
@@ -108,6 +120,40 @@ private class PreviewWebViewClient(
         val bytes = imageSource?.read(resolved.relativePath) ?: return blocked()
         return WebResourceResponse(resolved.mimeType, null, ByteArrayInputStream(bytes))
     }
+
+    /**
+     * Навигация по касанию ссылки — `FR-28`, решение `OQ-8`.
+     *
+     * Решение принимает [classifyPreviewLink] в общем коде; здесь — исполнение.
+     * `true` означает «навигации не будет»: единственный случай `false` —
+     * внутренний якорь, прокрутку по которому WebView делает сам.
+     *
+     * Во внешний запуск уходят только адреса, которые классификация признала
+     * внешними (`http`/`https`/`mailto`); `intent://` и прочие схемы до
+     * `startActivity` не доходят по построению. Отсутствие обработчика — не
+     * падение: превью показывает документ, а не гарантирует наличие браузера.
+     */
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+        when (val action = classifyPreviewLink(request.url.toString())) {
+            is PreviewLinkAction.ScrollInPreview -> false
+
+            is PreviewLinkAction.OpenExternally -> {
+                try {
+                    view.context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(action.url)))
+                } catch (_: ActivityNotFoundException) {
+                    // Обработчика нет (нет браузера или почтового клиента) —
+                    // касание молча ни к чему не приводит, приложение живо (FR-9).
+                }
+                true
+            }
+
+            is PreviewLinkAction.DocumentLink -> {
+                onDocumentLink(action.path)
+                true
+            }
+
+            is PreviewLinkAction.Ignore -> true
+        }
 
     /**
      * Пустой ответ вместо `null`: `null` означал бы «пусть WebView грузит сам»,

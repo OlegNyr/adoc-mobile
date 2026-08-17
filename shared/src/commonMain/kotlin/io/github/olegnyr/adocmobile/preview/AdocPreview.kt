@@ -19,10 +19,14 @@ import androidx.compose.ui.Modifier
  *   картинки остаётся пустой прямоугольник. Какой именно путь запрашивается,
  *   решает не платформа, а [resolvePreviewImageRequest]; реализация источника —
  *   у владельца файлового доступа (поток 4).
+ * @param onDocumentLink касание межфайлового `xref` (`FR-28`, `OQ-8`): экран
+ *   показывает уведомление «документ не открыт» с переданным путём. Что считать
+ *   таким касанием, решает [classifyPreviewLink], а не платформа.
  */
 @Composable
 expect fun AdocPreview(
     html: String,
     modifier: Modifier = Modifier,
     imageSource: PreviewImageSource? = null,
+    onDocumentLink: (String) -> Unit = {},
 )

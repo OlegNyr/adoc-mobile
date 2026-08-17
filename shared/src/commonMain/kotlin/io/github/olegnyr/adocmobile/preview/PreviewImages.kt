@@ -107,7 +107,7 @@ private fun isSafeSegment(segment: String): Boolean =
  * читаются как UTF-8 строго — последовательность, не складывающаяся в текст,
  * это отказ, а не «как получится» (тот же принцип, что в [openDocument]).
  */
-private fun decodePercent(segment: String): String? {
+internal fun decodePercent(segment: String): String? {
     if (!segment.contains('%')) return segment
     val bytes = ArrayList<Byte>(segment.length)
     var i = 0

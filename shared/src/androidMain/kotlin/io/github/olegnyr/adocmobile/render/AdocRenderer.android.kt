@@ -3,6 +3,7 @@ package io.github.olegnyr.adocmobile.render
 import android.content.Context
 import android.content.res.AssetManager
 import com.dokar.quickjs.QuickJs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
@@ -55,6 +56,36 @@ private const val ENGINE_STACK_KB = 8192
  * в свой лимит и бросить исключение раньше, чем поток снесёт стек.
  */
 private const val ENGINE_STACK_HEADROOM_KB = 1024
+
+/**
+ * Предел одной конвертации, мс (`FR-11`, `TC-9`).
+ *
+ * Выведен из записанных замеров `T-013`, как требует `FR-11`, а не назначен:
+ * медиана на предельном документе (~1000 строк, `ADR-004`) — 142 мс, худший
+ * известный прогон (3000 строк, за пределом) — 414 мс. 5000 мс — это ~35 медиан
+ * и ~12 худших прогонов: запас на бюджетное устройство, чья скорость не
+ * измерялась (названная гипотеза спеки). Требование фиксирует, что зависание
+ * невозможно, а не конкретное число: после замера на бюджетном устройстве
+ * значение положено ужесточить.
+ */
+private const val RENDER_TIMEOUT_MILLIS = 5_000L
+
+/**
+ * Переживает ли движок исход рендера [failure] (`FR-9`, постусловие `UC-4`).
+ *
+ * Отмена — штатная работа пайплайна (`FR-10`): при быстром наборе она случается
+ * на каждую правку, и платить за неё 46–49 мс подъёма движка значило бы
+ * похоронить смысл синглтона (`FR-3`). Всё остальное — отказ движка: таймаут
+ * (`QuickJsInterruptedException` — по имени «прерывание», по смыслу `FR-11`),
+ * переполнение стека, исчерпание памяти, исключение — после него неизвестно,
+ * на чём остановился Opal-рантайм, и следующий вызов не имеет права это
+ * наследовать. Умолчание поэтому «пересоздать», а не «поверить».
+ *
+ * Тип-предок, а не точный класс: kotlinx кидает наследников
+ * (`JobCancellationException`). `Throwable`, а не `Exception`: переполнение
+ * стека — `Error`.
+ */
+internal fun engineSurvives(failure: Throwable): Boolean = failure is CancellationException
 
 /**
  * Конвертация в режиме фрагмента и с `showtitle` (`FR-7`).
@@ -134,9 +165,23 @@ internal object QuickJsAdocRenderer : AdocRenderer {
         val literal = jsonStringLiteral(source)
         withContext(engineDispatcher) {
             val engine = engine()
-            engine.evaluate<Any?>("globalThis.__adocSource = $literal;", filename = "source.js")
-            engine.evaluate<Any?>(CONVERT_SCRIPT, filename = "convert.mjs", asModule = true)
-            engine.evaluate<String>("globalThis.__adocHtml", filename = "fetch.js")
+            try {
+                engine.evaluate<Any?>("globalThis.__adocSource = $literal;", filename = "source.js")
+                engine.evaluate<Any?>(CONVERT_SCRIPT, filename = "convert.mjs", asModule = true)
+                engine.evaluate<String>("globalThis.__adocHtml", filename = "fetch.js")
+            } catch (failure: Throwable) {
+                // Отказ движка (TC-8, TC-9): экземпляр закрывается здесь же, на
+                // его потоке, и следующий render поднимет свежий — постусловие
+                // UC-4. Отмена (FR-10) движок не трогает: см. engineSurvives.
+                if (!engineSurvives(failure)) {
+                    quickJs = null
+                    runCatching { engine.close() }
+                }
+                // Сам отказ — не место для трактовки: что показать и что
+                // записать, решает PreviewPolicy.renderFailed, и не по
+                // сообщению исключения (TC-29), а по его типу.
+                throw failure
+            }
         }
     }
 
@@ -150,10 +195,20 @@ internal object QuickJsAdocRenderer : AdocRenderer {
         val bundle = assets.open(BUNDLE_ASSET).use { it.readBytes().decodeToString() }
 
         val created = QuickJs.create(engineDispatcher)
-        created.maxStackSize = (ENGINE_STACK_KB - ENGINE_STACK_HEADROOM_KB).toLong() * 1024
-        // Скрипт, а не модуль: финальный `export` в бандле заменён на присваивание
-        // globalThis.Asciidoctor — см. androidApp/src/debug/tools/patch-asciidoctor.py.
-        created.evaluate<Any?>(bundle, filename = "asciidoctor.js", asModule = false)
+        try {
+            created.maxStackSize = (ENGINE_STACK_KB - ENGINE_STACK_HEADROOM_KB).toLong() * 1024
+            // Лимит на конвертацию (FR-11): движок сам прерывает вычисление,
+            // ушедшее за предел, — QuickJsInterruptedException, отказ по FR-9.
+            created.evaluationTimeoutMillis = RENDER_TIMEOUT_MILLIS
+            // Скрипт, а не модуль: финальный `export` в бандле заменён на присваивание
+            // globalThis.Asciidoctor — см. androidApp/src/debug/tools/patch-asciidoctor.py.
+            created.evaluate<Any?>(bundle, filename = "asciidoctor.js", asModule = false)
+        } catch (failure: Throwable) {
+            // Полусобранный движок не оставляется ни в поле, ни в памяти:
+            // иначе каждый повторный подъём после отказа течёт нативным рантаймом.
+            runCatching { created.close() }
+            throw failure
+        }
 
         quickJs = created
         initCount++
