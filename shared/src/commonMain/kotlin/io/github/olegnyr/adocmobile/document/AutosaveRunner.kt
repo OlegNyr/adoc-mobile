@@ -38,6 +38,11 @@ import kotlinx.coroutines.launch
  * @param clock источник времени в миллисекундах эпохи Unix — та же шкала, что
  * у [DocumentState.savedAt]
  * @param delayUntil ожидание до момента `dueAt`; умолчание — [delay] по часам
+ * @param onWriteResult наблюдатель исхода каждой записи (мини-слайс `SL-8`).
+ * Политике достаточно факта отказа, но экрану для плашки `FR-17` нужен тип
+ * [DocumentWriteError] и источник — [DocumentWriteResult.Failed] несёт оба.
+ * Успех тоже сообщается: плашка отказа гаснет только успешной записью.
+ * Зовётся в корутине [scope] до передачи исхода политике.
  */
 class AutosaveRunner(
     initialDocument: DocumentState,
@@ -48,6 +53,7 @@ class AutosaveRunner(
     private val delayUntil: suspend (dueAt: Long) -> Unit = { dueAt ->
         delay((dueAt - clock()).coerceAtLeast(0))
     },
+    private val onWriteResult: (DocumentWriteResult) -> Unit = {},
 ) {
 
     private val state = MutableStateFlow(initialDocument)
@@ -119,6 +125,7 @@ class AutosaveRunner(
     private fun launchWrite(snapshot: String) {
         scope.launch {
             val result = access.write(document.source, snapshot.toFileText(document.lineEnding))
+            onWriteResult(result)
             val outcome = when (result) {
                 DocumentWriteResult.Written -> policy.writeSucceeded(document, clock())
                 is DocumentWriteResult.Failed -> policy.writeFailed(document)

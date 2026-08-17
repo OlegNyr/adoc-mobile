@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.olegnyr.adocmobile.document.AutosaveRunner
 import io.github.olegnyr.adocmobile.document.DocumentEditor
-import io.github.olegnyr.adocmobile.document.DocumentFileAccess
 import io.github.olegnyr.adocmobile.document.DocumentOpenResult
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentState
@@ -312,20 +311,22 @@ class EditorScreenModel(
 
         // Новый исполнитель — новая политика автосохранения (параметр по
         // умолчанию конструктора): экземпляр политики рассчитан ровно на один
-        // документ (FR-8). Шов записи обёрнут наблюдателем: исполнитель отдаёт
-        // политике только факт отказа, а плашке `OQ-3` нужен его текст —
-        // перехват на границе шва даёт текст, не трогая пакет document/.
+        // документ (FR-8). Исход каждой записи исполнитель сообщает сам
+        // (мини-слайс SL-8 фичи 004): плашке `OQ-3` нужен текст ошибки, и тип
+        // с источником приходят штатно, без обёртки шва. Наблюдатель зовётся
+        // в корутине области экрана — там же, где живёт состояние holder-а.
         val runner = AutosaveRunner(
             initialDocument = opened,
-            access = WriteObservingAccess(access) { result ->
+            access = access,
+            scope = docScope,
+            clock = clock,
+            delayUntil = delayUntil,
+            onWriteResult = { result ->
                 writeFailure = when (result) {
                     DocumentWriteResult.Written -> null
                     is DocumentWriteResult.Failed -> result.error.userMessage(result.source.displayName)
                 }
             },
-            scope = docScope,
-            clock = clock,
-            delayUntil = delayUntil,
         )
 
         val fieldText = editor.textFieldState.text.toString()
@@ -357,24 +358,4 @@ class EditorScreenModel(
         // видимости сразу и рендерит без дебаунса, как при показе вкладки.
         if (previewVisible) preview.previewShown()
     }
-}
-
-/**
- * Шов записи с наблюдателем исхода — для плашки отказа записи (`OQ-3`).
- *
- * [AutosaveRunner] сообщает политике только *факт* отказа; текст
- * `DocumentWriteError.userMessage` при этом оставался бы внутри шва. Обёртка
- * перехватывает исход на границе — единственной точке, принадлежащей экрану, —
- * и не меняет ни исполнителя, ни политику, ни сам шов.
- *
- * [onWriteResult] зовётся в корутине исполнителя, то есть в области экрана на
- * главном потоке — там же, где живёт наблюдаемое состояние holder-а.
- */
-private class WriteObservingAccess(
-    private val delegate: DocumentFileAccess,
-    private val onWriteResult: (DocumentWriteResult) -> Unit,
-) : DocumentFileAccess by delegate {
-
-    override suspend fun write(source: DocumentSource, fileText: String): DocumentWriteResult =
-        delegate.write(source, fileText).also(onWriteResult)
 }

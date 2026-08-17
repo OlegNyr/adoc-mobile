@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -136,6 +137,38 @@ class AutosaveRunnerTest {
         assertEquals(2, access.writeCalls)
         assertEquals("v2", access.written.last())
         assertFalse(runner.document.isModified)
+    }
+
+    /**
+     * Мини-слайс `SL-8`: исход записи виден снаружи исполнителя вместе с типом
+     * ошибки — экрану для плашки `FR-17` нужен `DocumentWriteError`, а не только
+     * факт отказа. До этого тип перехватывала обёртка шва в зоне экрана.
+     */
+    @Test
+    fun TC_17_writeOutcomeIsReportedOutwardWithErrorType() {
+        val outcomes = mutableListOf<DocumentWriteResult>()
+        access.result = DocumentWriteResult.Failed(source, DocumentWriteError.NoSpace)
+        val runner = AutosaveRunner(
+            initialDocument = DocumentState.opened(source, "текст"),
+            access = access,
+            scope = scope,
+            clock = { now },
+            delayUntil = waits::wait,
+            onWriteResult = outcomes::add,
+        )
+
+        runner.textEdited("правка")
+        runner.movedToBackground()
+
+        val failed = assertIs<DocumentWriteResult.Failed>(outcomes.single(), "отказ доезжает наружу")
+        assertEquals(DocumentWriteError.NoSpace, failed.error, "тип ошибки не теряется")
+        assertEquals(source, failed.source, "источник при ошибке — для текста userMessage")
+
+        // Успех тоже сообщается: плашка отказа гаснет только успешной записью.
+        access.result = null
+        runner.retryRequested()
+        assertEquals(2, outcomes.size)
+        assertEquals(DocumentWriteResult.Written, outcomes.last())
     }
 
     @Test
