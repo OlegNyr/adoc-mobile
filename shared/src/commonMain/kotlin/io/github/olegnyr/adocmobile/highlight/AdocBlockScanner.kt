@@ -38,22 +38,56 @@ package io.github.olegnyr.adocmobile.highlight
 object AdocBlockScanner {
 
     /**
-     * Единственный вход. Принимает исходник и возвращает новый результат —
+     * Полный проход. Принимает исходник и возвращает новый результат —
      * буфер не трогается ни при каком исходе (`FR-24`).
      */
     fun scan(source: String): AdocScan {
+        val region = scanRegion(source, startOffset = 0, initialStack = emptyList(), stopper = null)
+        return AdocScan(spans = region.spans, blockStates = region.blockStates)
+    }
+
+    /**
+     * Проход по региону — ядро и полного, и инкрементального сканирования (`FR-27`).
+     *
+     * Начинает со строки на смещении [startOffset] со стеком блоков [initialStack]
+     * и идёт до конца исходника либо до строки, на которой [stopper] вернул `true`.
+     *
+     * [stopper] спрашивается только на «чистой» границе — перед строкой, которой
+     * предшествует *пустая* строка. Пустая строка — единственная точка, где всё
+     * построчное состояние канонично независимо от истории: роль — граница,
+     * копилка логической строки пуста, перенос значения атрибута оборван, метка
+     * стиля забыта, список закрыт. Значит состояние прохода в этой точке — один
+     * лишь стек блоков, и его равенства достаточно, чтобы дальнейший результат
+     * совпал со старым. Ограничитель тоже даёт каноничное состояние, но его
+     * пришлось бы заново распознавать с учётом маскарада — граница по пустой
+     * строке проще и надёжнее; худший случай без пустых строк деградирует до
+     * прохода до конца, что `TC-32` объявляет ожидаемым.
+     */
+    internal fun scanRegion(
+        source: String,
+        startOffset: Int,
+        initialStack: List<AdocBlockFrame>,
+        stopper: ((scannedLines: Int, lineStart: Int, stack: List<AdocBlockFrame>) -> Boolean)?,
+    ): AdocRegionScan {
         val spans = mutableListOf<AdocSpan>()
         val blockStates = mutableListOf<List<AdocBlockFrame>>()
-        val stack = mutableListOf<AdocBlockFrame>()
+        val stack = initialStack.toMutableList()
 
-        // Начало документа — начало блока: первая же строка может быть заголовком.
+        // Начало региона — начало блока: рестарт выбирается только там, где это верно.
         var previousRole = AdocLineRole.Boundary
         var insideList = false
         var pendingStyle: String? = null
         var attributeContinues = false
+        var previousLineBlank = false
+        var scanned = 0
+        var stopped = false
         val inline = InlineAccumulator(source, spans)
 
-        forEachLine(source) { lineStart, lineEnd ->
+        forEachLine(source, startOffset) { lineStart, lineEnd ->
+            if (stopper != null && previousLineBlank && stopper(scanned, lineStart, stack)) {
+                stopped = true
+                return@forEachLine false
+            }
             val line = source.substring(lineStart, lineEnd)
             val delimiter = parseDelimiter(line)
             val open = stack.lastOrNull()
@@ -152,6 +186,9 @@ object AdocBlockScanner {
             }
 
             blockStates += stack.toList()
+            previousLineBlank = line.isBlank()
+            scanned++
+            true
         }
         inline.flush()
 
@@ -161,7 +198,12 @@ object AdocBlockScanner {
         // первым идёт более широкий диапазон.
         spans.sortWith(compareBy({ it.range.start }, { -it.range.length }))
 
-        return AdocScan(spans = spans, blockStates = blockStates)
+        return AdocRegionScan(
+            spans = spans,
+            blockStates = blockStates,
+            scannedLines = scanned,
+            stopped = stopped,
+        )
     }
 
     /**
@@ -308,20 +350,21 @@ object AdocBlockScanner {
     }
 
     /**
-     * Обход строк с сохранением смещений в исходнике.
+     * Обход строк с сохранением смещений в исходнике, начиная со смещения [from].
      *
      * `split` здесь не годится: диапазоны считаются по исходному тексту, а
      * документ пользователя может прийти с CRLF. Завершающий `\r` в строку не
      * входит — иначе он попадал бы в ограничитель и ломал сравнение длин, — но
-     * смещения при этом остаются исходными.
+     * смещения при этом остаются исходными. [action] возвращает `false`, чтобы
+     * остановить обход, — на этом держится ранняя сходимость `FR-27`.
      */
-    private inline fun forEachLine(source: String, action: (start: Int, endExclusive: Int) -> Unit) {
-        var start = 0
+    private inline fun forEachLine(source: String, from: Int, action: (start: Int, endExclusive: Int) -> Boolean) {
+        var start = from
         while (true) {
             val breakAt = source.indexOf('\n', start)
             val rawEnd = if (breakAt < 0) source.length else breakAt
             val end = if (rawEnd > start && source[rawEnd - 1] == '\r') rawEnd - 1 else rawEnd
-            action(start, end)
+            if (!action(start, end)) return
             if (breakAt < 0) return
             start = breakAt + 1
         }
@@ -376,6 +419,23 @@ object AdocBlockScanner {
     private const val MIN_RUN_LENGTH = 4
     private const val OPEN_DELIMITER_LENGTH = 2
 }
+
+/**
+ * Результат прохода по региону — сырьё инкрементального сканирования (`FR-27`).
+ *
+ * @property spans диапазоны просканированных строк, отсортированные как в [AdocScan].
+ * @property blockStates стек блоков после каждой просканированной строки.
+ * @property scannedLines число просканированных строк — оракул `TC-31`/`TC-35`:
+ * инкрементальность проверяется этим числом, а не временем.
+ * @property stopped `true`, если проход остановлен ранней сходимостью, а не
+ * концом исходника; хвост результата в этом случае берётся из старого прохода.
+ */
+internal class AdocRegionScan(
+    val spans: List<AdocSpan>,
+    val blockStates: List<List<AdocBlockFrame>>,
+    val scannedLines: Int,
+    val stopped: Boolean,
+)
 
 /**
  * Копилка логической строки блока (`FR-17`) — единицы инлайн-разбора.

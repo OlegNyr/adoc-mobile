@@ -28,6 +28,14 @@ import io.github.olegnyr.adocmobile.highlight.AdocSpan
 class AdocHighlightTransformation(
     private val styles: AdocHighlightStyles,
     private val spans: List<AdocSpan>,
+    /**
+     * Видимое окно в смещениях символов (`FR-26`), или `null`, пока раскладка
+     * ещё не измерена. Стиль ставится только диапазонам, пересекающим окно, и
+     * обрезается по нему: незакрытый listing может тянуться на сотни строк ниже
+     * экрана, а стоимость кадра определяется числом и длиной поставленных
+     * диапазонов (`T-010`).
+     */
+    private val window: AdocRange? = null,
 ) : OutputTransformation {
 
     override fun TextFieldBuffer.transformOutput() {
@@ -49,8 +57,31 @@ class AdocHighlightTransformation(
      * устройстве.
      */
     internal fun decorate(length: Int, place: (style: SpanStyle, start: Int, end: Int) -> Unit) {
-        for (span in clampSpans(spans, length)) {
+        for (span in windowedSpans(spans, window, length)) {
             place(styles[span.style], span.range.start, span.range.endExclusive)
+        }
+    }
+}
+
+/**
+ * Диапазоны, попадающие в буфер длины [length] и в окно [window] (`FR-26`).
+ *
+ * Сначала рассинхрон с буфером ([clampSpans]), затем окно: диапазон вне окна
+ * выбрасывается, пересекающий его — обрезается по краям окна. Обрезка меняет
+ * только невидимую часть: внутри окна стиль тот же, а поставленный диапазон
+ * перестаёт тянуться за экран вместе с содержимым незакрытого блока.
+ * `window = null` — раскладка ещё не измерена, ставится всё (поведение `SL-1a`).
+ */
+internal fun windowedSpans(spans: List<AdocSpan>, window: AdocRange?, length: Int): List<AdocSpan> {
+    val bounded = clampSpans(spans, length)
+    if (window == null) return bounded
+    return bounded.mapNotNull { span ->
+        val start = maxOf(span.range.start, window.start)
+        val end = minOf(span.range.endExclusive, window.endExclusive)
+        when {
+            start >= end -> null
+            start == span.range.start && end == span.range.endExclusive -> span
+            else -> span.copy(range = AdocRange(start, end))
         }
     }
 }

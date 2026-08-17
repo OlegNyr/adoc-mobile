@@ -5,6 +5,7 @@ import io.github.olegnyr.adocmobile.highlight.AdocBlockScanner
 import io.github.olegnyr.adocmobile.highlight.AdocRange
 import io.github.olegnyr.adocmobile.highlight.AdocSpan
 import io.github.olegnyr.adocmobile.highlight.AdocStyle
+import io.github.olegnyr.adocmobile.highlight.HighlightSource
 import io.github.olegnyr.adocmobile.theme.darkColors
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -127,4 +128,56 @@ class AdocHighlightTransformationTest {
 
         assertEquals(spans, clamped, "внутри буфера порядок и состав не меняются")
     }
+
+    // region видимое окно — FR-26, слайс SL-5
+
+    @Test
+    fun TC_37_placedStylesAreProportionalToTheWindowNotTheDocument() {
+        // 500 заголовков на 1000 строк. Обоснование окна — замеры T-010:
+        // стоимость кадра определяется числом поставленных диапазонов и не
+        // зависит от их видимости, поэтому оракул — число вызовов addStyle.
+        val lines = buildList {
+            repeat(500) {
+                add("= Раздел $it")
+                add("")
+            }
+        }
+        val src = HighlightSource(*lines.toTypedArray())
+        val spans = src.scan().spans
+        assertEquals(500, spans.size, "документ-стенд должен дать по диапазону на заголовок")
+
+        // Окно — строки 200..260: заголовки на чётных строках, 31 штука.
+        val window = AdocRange(src.line(200).start, src.line(260).endExclusive)
+        val windowed = placements(AdocHighlightTransformation(styles, spans, window), src.text.length)
+        val unwindowed = placements(AdocHighlightTransformation(styles, spans), src.text.length)
+
+        assertEquals(500, unwindowed.size, "без окна ставится весь документ — так было в SL-1a")
+        assertEquals(31, windowed.size, "в буфер обязано попасть окно, а не документ")
+        for ((_, start, end) in windowed) {
+            assertTrue(start >= window.start && end <= window.endExclusive, "стиль $start..$end вне окна")
+        }
+    }
+
+    @Test
+    fun TC_37_spanCrossingTheWindowIsCroppedToIt() {
+        // Незакрытый listing тянется до конца документа; окно обязано обрезать
+        // его диапазоны, иначе один блок вернёт стоимость всего документа.
+        val spans = listOf(AdocSpan(AdocRange(0, 1000), AdocStyle.VerbatimContent))
+        val window = AdocRange(400, 460)
+
+        assertEquals(
+            listOf(AdocSpan(AdocRange(400, 460), AdocStyle.VerbatimContent)),
+            windowedSpans(spans, window, length = 1000),
+        )
+    }
+
+    @Test
+    fun TC_37_nullWindowFallsBackToTheWholeBuffer() {
+        // До первой раскладки окна нет: поведение SL-1a, ставится всё.
+        val spans = AdocBlockScanner.scan(document).spans
+
+        assertEquals(spans, windowedSpans(spans, window = null, length = document.length))
+    }
+
+    // endregion
 }
