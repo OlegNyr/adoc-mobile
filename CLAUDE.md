@@ -72,7 +72,7 @@ Mobile AsciiDoc editor with live preview for Android and iOS, Kotlin Multiplatfo
 
 Maximum logic in `commonMain`; only two narrow expect/actual seams. Target ≥80% shared code — this ratio is an explicit MVP success criterion, so resist pushing logic into platform source sets.
 
-**Editor (commonMain).** `BasicTextField` with `TextFieldState`; highlighting applied via `OutputTransformation` — the transformation decorates the *display* and must never mutate the text. Do not reach for `value`/`onValueChange` + `VisualTransformation`; the newer API was chosen for large-document performance.
+**Editor (commonMain).** `BasicTextField` with `TextFieldState`; highlighting applied via `OutputTransformation` — the transformation decorates the *display* and must never mutate the text. Do not reach for `value`/`onValueChange` + `VisualTransformation` **for the editor canvas**; the newer API was chosen for large-document performance. Single-line form fields (e.g. the clone screen) may use plain `value`/`onValueChange` — the performance rationale does not apply there (scope clarified with the owner, 2026-08-17).
 
 **Highlighter (commonMain).** A hand-written line-based scanner, not a ported grammar. Single-pass state machine over line states (plain / inside listing / inside example / inside comment) plus inline regexes in the plain state. Output is a platform-neutral list of `(range, style)` — keep it that way, it is also the fallback path if the Compose text field has to be swapped for a platform-native one. Re-scan incrementally: from the nearest block boundary above the edit down to the first line whose state matches again.
 
