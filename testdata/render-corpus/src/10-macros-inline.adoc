@@ -1,0 +1,71 @@
+= Строчные макросы и ссылки
+:idprefix:
+:idseparator: -
+:experimental:
+:url-repo: https://example.org/repo
+
+== Автоссылки
+
+Голый адрес https://example.org попадает в вывод как ссылка.
+Адрес в конце предложения https://example.org.
+Адрес в скобках (https://example.org) и через запятую https://example.org, дальше текст.
+Схемы ftp://example.org и irc://example.org тоже распознаются.
+Почта user@example.org распознаётся без макроса.
+Угловая форма <https://example.org> скобки в вывод не отдаёт.
+
+== Макрос link
+
+link:https://example.org[текст ссылки]
+link:https://example.org[]
+link:https://example.org[текст, window=_blank]
+link:https://example.org[текст^]
+link:{url-repo}/tree/main[ссылка из атрибута]
+link:++https://example.org/path_with_underscores^and^carets++[экранированная цель]
+link:file.html[локальный файл]
+
+Ссылка с ролью: https://example.org[текст, role=external].
+Ссылка с заголовком: https://example.org[текст, title=Подсказка].
+
+== Почта
+
+mailto:user@example.org[написать]
+mailto:user@example.org[Тема письма, Тема, Текст письма]
+
+== Изображения
+
+Строчное изображение image:partials/point.svg[Точка,16,16] внутри абзаца.
+С ролью и заголовком: image:partials/point.svg[Точка,16,16,role=icon,title=Подсказка].
+Изображение-ссылка: image:partials/point.svg[Точка,16,16,link=https://example.org].
+
+== Сноски
+
+Первая сноска.footnote:[Текст первой сноски.]
+Именованная сноска.footnote:named[Текст именованной сноски.]
+Повторная ссылка на неё.footnote:named[]
+
+== Passthrough
+
+Строчный `+{нераскрытый}+` и +*не полужирный*+.
+Двойная форма ++__не курсив__++ и тройная +++<b>сырой HTML</b>+++.
+Макрос pass:[<em>сырой</em>] и pass:c[спецсимволы < > &] и pass:q[*полужирный* через pass].
+Моноширинный без подстановок: `+{project}+`.
+
+== UI-макросы
+
+Сочетание клавиш kbd:[Ctrl+T] и одиночная клавиша kbd:[F5].
+Кнопка btn:[OK] и btn:[Отмена].
+Пункт меню menu:Вид[Масштаб > Сбросить].
+
+== Указатель
+
+Термин в указателе ((AsciiDoc)) внутри текста.
+Скрытый термин indexterm:[Asciidoctor, движок].
+Составной (((Asciidoctor, версии, 2.0.26))).
+
+== Прочее
+
+Строчный якорь [[inline-anchor]]в середине абзаца.
+Строчный якорь макросом anchor:macro-anchor[] рядом.
+Ссылка на строчный якорь: <<inline-anchor,строчный якорь>>.
+
+Знак градуса 20{deg}C и обратный апостроф {backtick} как символ.

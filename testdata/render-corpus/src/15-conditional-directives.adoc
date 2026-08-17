@@ -1,0 +1,108 @@
+= Условные директивы
+:idprefix:
+:idseparator: -
+:build: mobile
+:feature-git:
+:empty-flag:
+
+== ifdef и ifndef
+
+ifdef::feature-git[]
+Этот абзац виден: атрибут `feature-git` задан.
+endif::feature-git[]
+
+ifdef::no-such-flag[]
+Этот абзац не виден: атрибут не задан.
+endif::no-such-flag[]
+
+ifndef::no-such-flag[]
+Этот абзац виден: атрибут не задан, а условие отрицательное.
+endif::no-such-flag[]
+
+ifndef::feature-git[]
+Этот абзац не виден.
+endif::feature-git[]
+
+== Однострочная форма
+
+ifdef::feature-git[Содержимое прямо в директиве, атрибут задан.]
+ifdef::no-such-flag[Этого в выводе нет.]
+ifndef::no-such-flag[Отрицательная однострочная форма.]
+
+== Несколько атрибутов
+
+ifdef::feature-git,no-such-flag[]
+Логическое ИЛИ: достаточно одного заданного атрибута.
+endif::[]
+
+ifdef::feature-git+empty-flag[]
+Логическое И: заданы оба атрибута.
+endif::[]
+
+ifdef::feature-git+no-such-flag[]
+Логическое И не выполнено, абзаца в выводе нет.
+endif::[]
+
+== Закрытие без имени атрибута
+
+ifdef::build[]
+Открыто с именем, закрыто без имени.
+endif::[]
+
+== ifeval
+
+ifeval::["{build}" == "mobile"]
+Сборка мобильная.
+endif::[]
+
+ifeval::["{build}" == "desktop"]
+Сборка десктопная, в вывод не попадает.
+endif::[]
+
+ifeval::[2 > 1]
+Числовое сравнение истинно.
+endif::[]
+
+ifeval::[{sectnumlevels} >= 1]
+Сравнение по встроенному числовому атрибуту.
+endif::[]
+
+== Вложенные условия
+
+ifdef::feature-git[]
+Внешнее условие выполнено.
+
+ifdef::empty-flag[]
+Внутреннее условие тоже выполнено.
+endif::empty-flag[]
+
+Конец внешнего условия.
+endif::feature-git[]
+
+== Условие вокруг блочных конструкций
+
+ifdef::feature-git[]
+|===
+| Таблица | внутри условия
+| a | b
+|===
+
+[source,kotlin]
+----
+val insideCondition = true
+----
+endif::feature-git[]
+
+== Условие внутри списка и таблицы
+
+* первый пункт
+ifdef::feature-git[]
+* условный пункт
+endif::feature-git[]
+* последний пункт
+
+== Экранированная директива
+
+\ifdef::feature-git[]
+Строка выше остаётся текстом.
+\endif::feature-git[]

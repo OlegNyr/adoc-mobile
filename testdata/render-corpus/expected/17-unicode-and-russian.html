@@ -1,0 +1,171 @@
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Интерфейс продукта русский, документы пользователей — тоже.
+Генерация идентификаторов из кириллических заголовков и типографика — первое место, где независимая реализация может разойтись с эталоном.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="идентификаторы-из-кириллических-заголовков">Идентификаторы из кириллических заголовков</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="раздел-с-пробелами-и-дефисом-минусом">Раздел с пробелами и дефисом-минусом</h3>
+<div class="paragraph">
+<p>Идентификатор строится из текста заголовка.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="раздел-где-есть-запятая-точка-и-двоеточие-вот-так">Раздел, где есть запятая, точка и двоеточие: вот так</h3>
+<div class="paragraph">
+<p>Пунктуация из идентификатора выпадает.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="раздел-с-цифрами-2026-и-латиницей-asciidoctor">Раздел с цифрами 2026 и латиницей Asciidoctor</h3>
+<div class="paragraph">
+<p>Смешанный заголовок.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="заголовок-прописными">ЗАГОЛОВОК ПРОПИСНЫМИ</h3>
+<div class="paragraph">
+<p>Регистр в идентификаторе понижается.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="ёлки-ёжики-и-ъ-с-ь">Ёлки, ёжики и Ъ с Ь</h3>
+<div class="paragraph">
+<p>Буквы вне базового набора.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="типографика">Типографика</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Кавычки-ёлочки «текст» и кавычки-лапки „текст“ остаются как есть.
+Типографские кавычки Asciidoctor: &#8220;текст&#8221; и &#8216;текст&#8217;.
+Тире: дефис-минус -, короткое тире --, длинное тире {mdash}.
+Неразрывный пробел: 10&#160;кг, 2026&#160;год.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="разные-письменности-и-знаки">Разные письменности и знаки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Латиница Asciidoctor, кириллица Асциидоктор, греческий αβγ, иврит שלום, арабский مرحبا.
+Иероглифы 文档 и кана ドキュメント.
+Эмодзи в тексте: 📱 и 🇷🇺 и составное 👨‍💻.
+Математические знаки: ≥ ≤ ≠ ± × ÷ ∞.
+Стрелки: ← → ↔ ⇒.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="форматирование-на-кириллице">Форматирование на кириллице</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Полужирный <strong>текст</strong> и курсив <em>текст</em> на кириллице.
+Внутри слова требуется unconstrained: слово<strong>текст</strong>слово и слово<em>текст</em>слово.
+Моноширинный <code>путь/к/файлу</code> и <code>КонстантаНаКириллице</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="кириллица-в-конструкциях">Кириллица в конструкциях</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<caption class="title">Table 1. Заголовок таблицы на кириллице</caption>
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 66.6667%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Ключ</th>
+<th class="tableblock halign-left valign-top">Значение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ширина</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">411 КБ</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">длительность</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">38 мс</p></td>
+</tr>
+</tbody>
+</table>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">val сообщение = "Кириллица внутри листинга"</code></pre>
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+Врезка на кириллице с эмодзи 📄.
+</td>
+</tr>
+</table>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>пункт списка на кириллице</p>
+</li>
+<li>
+<p>второй пункт</p>
+<div class="dlist">
+<dl>
+<dt class="hdlist1">Термин</dt>
+<dd>
+<p>Определение на кириллице.</p>
+</dd>
+</dl>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Сноска с кириллицей.<sup class="footnote">[<a id="_footnoteref_1" class="footnote" href="#_footnotedef_1" title="View footnote.">1</a>]</sup></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="юникод-в-ссылках-и-якорях">Юникод в ссылках и якорях</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="кириллический-якорь">Раздел с явным кириллическим якорем</h3>
+<div class="paragraph">
+<p>Ссылка на него: <a href="#кириллический-якорь">кириллический якорь</a>.</p>
+</div>
+<div class="paragraph">
+<p>Ссылка на адрес с кириллицей: <a href="https://example.org/путь">ссылка с кириллицей</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="символы-требующие-экранирования">Символы, требующие экранирования</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Угловые скобки &lt; и &gt;, амперсанд &amp;, кавычки " и '.
+Внутри моноширинного: <code>&lt;div class="x"&gt;&amp;&lt;/div&gt;</code>.</p>
+</div>
+</div>
+</div>
+<div id="footnotes">
+<hr>
+<div class="footnote" id="_footnotedef_1">
+<a href="#_footnoteref_1">1</a>. Текст сноски на русском языке.
+</div>
+</div>

@@ -1,0 +1,113 @@
+<div class="sect1">
+<h2 id="изображение">Изображение</h2>
+<div class="sectionbody">
+<div class="imageblock">
+<div class="content">
+<img src="partials/point.svg" alt="Точка">
+</div>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="partials/point.svg" alt="Точка" width="64" height="64">
+</div>
+<div class="title">Figure 1. Изображение с заголовком</div>
+</div>
+<div id="image-id" class="imageblock text-center image-role">
+<div class="content">
+<img src="partials/point.svg" alt="Точка">
+</div>
+</div>
+<div class="imageblock">
+<div class="content">
+<a class="image" href="https://example.org" target="_blank" rel="noopener"><img src="partials/point.svg" alt="Точка"></a>
+</div>
+</div>
+<div class="imageblock right">
+<div class="content">
+<img src="partials/point.svg" alt="Альтернативный текст">
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="оглавление-в-теле-документа">Оглавление в теле документа</h2>
+<div class="sectionbody">
+<!-- toc disabled -->
+</div>
+</div>
+<div class="sect1">
+<h2 id="разрывы">Разрывы</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Абзац до тематического разрыва.</p>
+</div>
+<hr>
+<div class="paragraph">
+<p>Абзац между разрывами.</p>
+</div>
+<div style="page-break-after: always;"></div>
+<div class="paragraph">
+<p>Абзац после разрыва страницы.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="якоря-и-заголовки-блоков">Якоря и заголовки блоков</h2>
+<div class="sectionbody">
+<div id="block-anchor" class="paragraph">
+<div class="title">Заголовок блока перед абзацем</div>
+<p>Абзац с якорем и заголовком.</p>
+</div>
+<div id="alt-anchor" class="exampleblock">
+<div class="title">Example 1. Другой блок</div>
+<div class="content">
+<div class="paragraph">
+<p>Блок с якорем в альтернативной форме.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="kroki-совместимые-диаграммные-блоки">Kroki-совместимые диаграммные блоки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Продукт рендерит диаграммы через Kroki; здесь важно, что без расширения блок остаётся листингом.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>@startuml
+Alice -&gt; Bob: запрос
+Bob --&gt; Alice: ответ
+@enduml</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>graph TD
+  A[Ввод] --&gt; B[Сканер]
+  A --&gt; C[Рендер]</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="не-поддерживаемые-на-мобильном-макросы">Не поддерживаемые на мобильном макросы</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Блоки ниже остаются в корпусе, чтобы расхождение было замечено, а не пропущено.</p>
+</div>
+<div class="videoblock">
+<div class="content">
+<iframe src="https://www.youtube.com/embed/example?rel=0" frameborder="0" allowfullscreen></iframe>
+</div>
+</div>
+<div class="audioblock">
+<div class="content">
+<audio src="partials/sound.mp3" controls>
+Your browser does not support the audio tag.
+</audio>
+</div>
+</div>
+</div>
+</div>

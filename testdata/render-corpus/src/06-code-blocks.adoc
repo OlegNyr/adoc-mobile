@@ -1,0 +1,156 @@
+= Блоки кода
+:idprefix:
+:idseparator: -
+:version: 4.0.9
+
+== Листинг без языка
+
+----
+plain listing content
+  с сохранением отступа
+----
+
+== Листинг с языком
+
+[source,kotlin]
+----
+package ru.example.adoc
+
+suspend fun render(source: String): String {
+    val html = engine.convert(source)
+    return html
+}
+----
+
+== Сокращённая форма стиля
+
+[,xml]
+----
+<project>
+  <name>adoc-mobile</name>
+</project>
+----
+
+== Заголовок и идентификатор
+
+.Пример на Kotlin
+[#listing-kotlin]
+[source,kotlin]
+----
+val editor = Editor(state = TextFieldState())
+----
+
+== Спецсимволы внутри листинга
+
+[source,html]
+----
+<div class="listingblock">
+  <pre>&amp; &lt; &gt; "кавычки"</pre>
+</div>
+----
+
+Внутри листинга разметка не действует: *не полужирный*, _не курсив_, {version} не раскрывается, // не комментарий.
+
+== Подстановки внутри листинга
+
+[source,kotlin,subs="+attributes"]
+----
+// версия ядра: {version}
+val version = "{version}"
+----
+
+[source,text,subs="verbatim,quotes"]
+----
+здесь *полужирный* работает благодаря subs
+----
+
+== Выноски
+
+[source,kotlin]
+----
+class Renderer { // <1>
+    fun render(src: String): String = convert(src) // <2>
+}
+----
+<1> Объявление класса.
+<2> Единственный метод контракта.
+
+Выноски в блоке без языка:
+
+----
+first line <1>
+second line <2>
+----
+<1> Первая строка.
+<2> Вторая строка.
+
+== Литеральные блоки
+
+....
+literal block content
+  отступ сохраняется
+....
+
+Литеральный абзац по отступу:
+
+ первая строка с отступом
+ вторая строка
+
+== Маскарад стиля над ограничителем
+
+[listing]
+....
+Ограничитель литерального блока, но стиль listing.
+....
+
+[literal]
+----
+Ограничитель листинга, но стиль literal.
+----
+
+[source,kotlin]
+....
+Литеральный ограничитель со стилем source.
+....
+
+== Опции блока
+
+[source%nowrap,kotlin]
+----
+val veryLongLine = "строка, которая не должна переноситься при выводе в превью"
+----
+
+[source%linenums,kotlin]
+----
+val a = 1
+val b = 2
+----
+
+== Вложенные ограничители разной длины
+
+----
+внешний листинг длины четыре
+-----
+это не закрывающий ограничитель, а содержимое
+-----
+конец содержимого
+----
+
+== Блок кода внутри других контейнеров
+
+* пункт списка
++
+[source,kotlin]
+----
+val insideList = true
+----
+
+|===
+| Ячейка с кодом
+
+a|
+[source,kotlin]
+----
+val insideCell = true
+----
+|===

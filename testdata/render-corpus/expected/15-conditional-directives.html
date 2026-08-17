@@ -1,0 +1,118 @@
+<div class="sect1">
+<h2 id="ifdef-и-ifndef">ifdef и ifndef</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Этот абзац виден: атрибут <code>feature-git</code> задан.</p>
+</div>
+<div class="paragraph">
+<p>Этот абзац виден: атрибут не задан, а условие отрицательное.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="однострочная-форма">Однострочная форма</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Содержимое прямо в директиве, атрибут задан.
+Отрицательная однострочная форма.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="несколько-атрибутов">Несколько атрибутов</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Логическое ИЛИ: достаточно одного заданного атрибута.</p>
+</div>
+<div class="paragraph">
+<p>Логическое И: заданы оба атрибута.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="закрытие-без-имени-атрибута">Закрытие без имени атрибута</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Открыто с именем, закрыто без имени.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="ifeval">ifeval</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Сборка мобильная.</p>
+</div>
+<div class="paragraph">
+<p>Числовое сравнение истинно.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="вложенные-условия">Вложенные условия</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Внешнее условие выполнено.</p>
+</div>
+<div class="paragraph">
+<p>Внутреннее условие тоже выполнено.</p>
+</div>
+<div class="paragraph">
+<p>Конец внешнего условия.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="условие-вокруг-блочных-конструкций">Условие вокруг блочных конструкций</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Таблица</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">внутри условия</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">a</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">b</p></td>
+</tr>
+</tbody>
+</table>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">val insideCondition = true</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="условие-внутри-списка-и-таблицы">Условие внутри списка и таблицы</h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p>первый пункт</p>
+</li>
+<li>
+<p>условный пункт</p>
+</li>
+<li>
+<p>последний пункт</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="экранированная-директива">Экранированная директива</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>ifdef::feature-git[]
+Строка выше остаётся текстом.
+endif::feature-git[]</p>
+</div>
+</div>
+</div>

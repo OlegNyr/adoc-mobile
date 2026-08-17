@@ -1,0 +1,399 @@
+<div class="sect1">
+<h2 id="объединение-колонок-и-строк">Объединение колонок и строк</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">A</th>
+<th class="tableblock halign-left valign-top">B</th>
+<th class="tableblock halign-left valign-top">C</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top" colspan="3"><p class="tableblock">ячейка на три колонки</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top" rowspan="2"><p class="tableblock">ячейка на две строки</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">b1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">c1</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">b2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">c2</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top" colspan="2" rowspan="2"><p class="tableblock">ячейка два на два</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">c3</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">c4</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="горизонтальное-выравнивание">Горизонтальное выравнивание</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">влево</th>
+<th class="tableblock halign-center valign-top">по центру</th>
+<th class="tableblock halign-right valign-top">вправо</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">влево в ячейке</p></td>
+<td class="tableblock halign-center valign-top"><p class="tableblock">центр в ячейке</p></td>
+<td class="tableblock halign-right valign-top"><p class="tableblock">вправо в ячейке</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="вертикальное-выравнивание">Вертикальное выравнивание</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">верх</p></td>
+<td class="tableblock halign-left valign-middle"><p class="tableblock">середина</p></td>
+<td class="tableblock halign-left valign-bottom"><p class="tableblock">низ</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">строка,
+которая
+делает
+ячейку
+высокой</p></td>
+<td class="tableblock halign-left valign-middle"><p class="tableblock">вторая</p></td>
+<td class="tableblock halign-left valign-bottom"><p class="tableblock">третья</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="комбинированное-выравнивание-в-спецификаторе-колонок">Комбинированное выравнивание в спецификаторе колонок</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-center valign-middle"><p class="tableblock">центр по обеим осям</p></td>
+<td class="tableblock halign-right valign-bottom"><p class="tableblock">правый нижний угол</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-middle"><p class="tableblock">a</p></td>
+<td class="tableblock halign-right valign-bottom"><p class="tableblock">b</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="стили-ячеек">Стили ячеек</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">стиль по умолчанию (d)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">явный default</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">сильный (s)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>strong</strong></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">выделенный (e)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><em>emphasis</em></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">моноширинный (m)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>monospaced <strong>без</strong> форматирования</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">заголовочный (h)</p></td>
+<th class="tableblock halign-left valign-top"><p class="tableblock">header</p></th>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">литеральный (l)</p></td>
+<td class="tableblock halign-left valign-top"><div class="literal"><pre> literal: *звёздочки* остаются</pre></div></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">asciidoc (a)</p></td>
+<td class="tableblock halign-left valign-top"><div class="content"><div class="paragraph">
+<p>Полноценный AsciiDoc:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>пункт списка</p>
+</li>
+<li>
+<p>второй пункт</p>
+</li>
+</ul>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+и врезка тоже.
+</td>
+</tr>
+</table>
+</div></div></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="стиль-в-спецификаторе-колонок">Стиль в спецификаторе колонок</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<tbody>
+<tr>
+<th class="tableblock halign-left valign-top"><p class="tableblock">заголовочная колонка</p></th>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>моноширинная</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>сильная</strong></p></td>
+</tr>
+<tr>
+<th class="tableblock halign-left valign-top"><p class="tableblock">ещё строка</p></th>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>код</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>важно</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="вложенная-таблица">Вложенная таблица</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 66.6667%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Внешняя</th>
+<th class="tableblock halign-left valign-top">Вложенная</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ячейка</p></td>
+<td class="tableblock halign-left valign-top"><div class="content"><table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">вложенная</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">таблица</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">a</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">b</p></td>
+</tr>
+</tbody>
+</table></div></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="повторение-спецификатора-колонок">Повторение спецификатора колонок</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-center valign-top"><p class="tableblock">обе</p></td>
+<td class="tableblock halign-center valign-top"><p class="tableblock">по центру</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-center valign-top"><p class="tableblock">a</p></td>
+<td class="tableblock halign-center valign-top"><p class="tableblock">b</p></td>
+</tr>
+</tbody>
+</table>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-middle"><p class="tableblock"><code>обе моноширинные</code></p></td>
+<td class="tableblock halign-left valign-middle"><p class="tableblock"><code>и по центру вертикально</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-middle"><p class="tableblock"><code>a</code></p></td>
+<td class="tableblock halign-left valign-middle"><p class="tableblock"><code>b</code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="разделитель-отличный-от-вертикальной-черты">Разделитель, отличный от вертикальной черты</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">A</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">B</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="форматы-данных">Форматы данных</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Движок</th>
+<th class="tableblock halign-left valign-top">Версия</th>
+<th class="tableblock halign-left valign-top">Размер</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">quickjs-kt</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1.0.14</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">411 КБ</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">zipline</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1.27.0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">417 КБ</p></td>
+</tr>
+</tbody>
+</table>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Ключ</th>
+<th class="tableblock halign-left valign-top">Значение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">a</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">b</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+</tr>
+</tbody>
+</table>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Ключ</th>
+<th class="tableblock halign-left valign-top">Значение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">a</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">b</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="многострочные-и-многоабзацные-ячейки">Многострочные и многоабзацные ячейки</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 100%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Обычная ячейка с
+переносом строки внутри</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><div class="content"><div class="paragraph">
+<p>Первый абзац ячейки со стилем a.</p>
+</div>
+<div class="paragraph">
+<p>Второй абзац той же ячейки.</p>
+</div></div></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>

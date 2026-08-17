@@ -1,0 +1,227 @@
+<div class="sect1">
+<h2 id="листинг-без-языка">Листинг без языка</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre>plain listing content
+  с сохранением отступа</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="листинг-с-языком">Листинг с языком</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">package ru.example.adoc
+
+suspend fun render(source: String): String {
+    val html = engine.convert(source)
+    return html
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="сокращённая-форма-стиля">Сокращённая форма стиля</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-xml" data-lang="xml">&lt;project&gt;
+  &lt;name&gt;adoc-mobile&lt;/name&gt;
+&lt;/project&gt;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="заголовок-и-идентификатор">Заголовок и идентификатор</h2>
+<div class="sectionbody">
+<div id="listing-kotlin" class="listingblock">
+<div class="title">Пример на Kotlin</div>
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">val editor = Editor(state = TextFieldState())</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="спецсимволы-внутри-листинга">Спецсимволы внутри листинга</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-html" data-lang="html">&lt;div class="listingblock"&gt;
+  &lt;pre&gt;&amp;amp; &amp;lt; &amp;gt; "кавычки"&lt;/pre&gt;
+&lt;/div&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Внутри листинга разметка не действует: <strong>не полужирный</strong>, <em>не курсив</em>, 4.0.9 не раскрывается, // не комментарий.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="подстановки-внутри-листинга">Подстановки внутри листинга</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">// версия ядра: 4.0.9
+val version = "4.0.9"</code></pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-text" data-lang="text">здесь <strong>полужирный</strong> работает благодаря subs</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="выноски">Выноски</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">class Renderer { // <b class="conum">(1)</b>
+    fun render(src: String): String = convert(src) // <b class="conum">(2)</b>
+}</code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<ol>
+<li>
+<p>Объявление класса.</p>
+</li>
+<li>
+<p>Единственный метод контракта.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Выноски в блоке без языка:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>first line <b class="conum">(1)</b>
+second line <b class="conum">(2)</b></pre>
+</div>
+</div>
+<div class="colist arabic">
+<ol>
+<li>
+<p>Первая строка.</p>
+</li>
+<li>
+<p>Вторая строка.</p>
+</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="литеральные-блоки">Литеральные блоки</h2>
+<div class="sectionbody">
+<div class="literalblock">
+<div class="content">
+<pre>literal block content
+  отступ сохраняется</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Литеральный абзац по отступу:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>первая строка с отступом
+вторая строка</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="маскарад-стиля-над-ограничителем">Маскарад стиля над ограничителем</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre>Ограничитель литерального блока, но стиль listing.</pre>
+</div>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Ограничитель листинга, но стиль literal.</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">Литеральный ограничитель со стилем source.</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="опции-блока">Опции блока</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight nowrap"><code class="language-kotlin" data-lang="kotlin">val veryLongLine = "строка, которая не должна переноситься при выводе в превью"</code></pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">val a = 1
+val b = 2</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="вложенные-ограничители-разной-длины">Вложенные ограничители разной длины</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre>внешний листинг длины четыре
+-----
+это не закрывающий ограничитель, а содержимое
+-----
+конец содержимого</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="блок-кода-внутри-других-контейнеров">Блок кода внутри других контейнеров</h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p>пункт списка</p>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">val insideList = true</code></pre>
+</div>
+</div>
+</li>
+</ul>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 100%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Ячейка с кодом</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><div class="content"><div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-kotlin" data-lang="kotlin">val insideCell = true</code></pre>
+</div>
+</div></div></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>

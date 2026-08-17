@@ -1,0 +1,141 @@
+<div class="sect1">
+<h2 id="explicit-anchor">Раздел с якорем в двойных скобках</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Ссылка на себя: <a href="#explicit-anchor">Раздел с якорем в двойных скобках</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="hash-anchor">Раздел с якорем через решётку</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Ссылка с текстом: <a href="#hash-anchor">текст ссылки</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="раздел-без-явного-якоря">Раздел без явного якоря</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Идентификатор генерируется из заголовка.
+Ссылка по естественному тексту заголовка: <a href="#раздел-без-явного-якоря">Раздел без явного якоря</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="формы-записи-ссылки">Формы записи ссылки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Угловая форма без текста: <a href="#explicit-anchor">Раздел с якорем в двойных скобках</a>.
+Угловая форма с текстом: <a href="#explicit-anchor">свой текст</a>.
+Макро-форма на внутридокументную цель: <a href="#explicit-anchor">макро-форма</a>.
+Макро-форма без решётки: <a href="#explicit-anchor">тоже внутридокументная</a>.
+Ссылка на другой документ: <a href="13-footnotes.html">сноски</a>.
+Ссылка на якорь в другом документе: <a href="13-footnotes.html#footnote-section">раздел другого документа</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="якоря-на-блоках-и-списках">Якоря на блоках и списках</h2>
+<div class="sectionbody">
+<div id="para-anchor" class="paragraph">
+<p>Абзац с якорем.</p>
+</div>
+<div id="list-anchor" class="ulist">
+<ul>
+<li>
+<p>пункт списка с якорем на списке</p>
+</li>
+<li>
+<p>второй пункт</p>
+</li>
+</ul>
+</div>
+<table id="table-anchor" class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">таблица</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">с якорем</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>Ссылки на них: <a href="#para-anchor">абзац</a>, <a href="#list-anchor">список</a>, <a href="#table-anchor">таблица</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="идентификаторы-с-разделителем-и-префиксом">Идентификаторы с разделителем и префиксом</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Атрибуты <code>:idprefix:</code> и <code>:idseparator:</code> заданы в шапке и меняют форму сгенерированных идентификаторов.</p>
+</div>
+<div class="sect2">
+<h3 id="заголовок-из-нескольких-слов">Заголовок из нескольких слов</h3>
+<div class="paragraph">
+<p>Ссылка на него: <a href="#заголовок-из-нескольких-слов">Заголовок из нескольких слов</a>.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="заголовок-с-пунктуацией-двоеточие-запятая">Заголовок с пунктуацией: двоеточие, запятая</h3>
+<div class="paragraph">
+<p>Ссылка на него: <a href="#Заголовок с пунктуацией: двоеточие">запятая</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="ссылка-внутри-других-конструкций">Ссылка внутри других конструкций</h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p>пункт со ссылкой <a href="#explicit-anchor">Раздел с якорем в двойных скобках</a></p>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+и во врезке <a href="#hash-anchor">тоже</a>.
+</td>
+</tr>
+</table>
+</div>
+</li>
+</ul>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Ячейка</th>
+<th class="tableblock halign-left valign-top">Ссылка</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">первая</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#explicit-anchor">в ячейке</a></p></td>
+</tr>
+</tbody>
+</table>
+<div class="exampleblock">
+<div class="title">Example 1. Заголовок блока со ссылкой <a href="#explicit-anchor">внутри</a></div>
+<div class="content">
+<div class="paragraph">
+<p>Содержимое.</p>
+</div>
+</div>
+</div>
+</div>
+</div>

@@ -1,0 +1,127 @@
+<div class="sect1">
+<h2 id="footnote-section">Простые сноски</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Первое утверждение со сноской.<sup class="footnote">[<a id="_footnoteref_1" class="footnote" href="#_footnotedef_1" title="View footnote.">1</a>]</sup>
+Второе утверждение со сноской.<sup class="footnote">[<a id="_footnoteref_2" class="footnote" href="#_footnotedef_2" title="View footnote.">2</a>]</sup></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="именованные-сноски-и-повторные-ссылки">Именованные сноски и повторные ссылки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Именованная сноска.<sup class="footnote" id="_footnote_engine">[<a id="_footnoteref_3" class="footnote" href="#_footnotedef_3" title="View footnote.">3</a>]</sup>
+Повторная ссылка на ту же сноску.<sup class="footnoteref">[<a class="footnote" href="#_footnotedef_3" title="View footnote.">3</a>]</sup>
+И ещё одна повторная ссылка.<sup class="footnoteref">[<a class="footnote" href="#_footnotedef_3" title="View footnote.">3</a>]</sup></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="разметка-внутри-сноски">Разметка внутри сноски</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Сноска с форматированием.<sup class="footnote">[<a id="_footnoteref_4" class="footnote" href="#_footnotedef_4" title="View footnote.">4</a>]</sup>
+Сноска со ссылкой на атрибут.<sup class="footnote">[<a id="_footnoteref_5" class="footnote" href="#_footnotedef_5" title="View footnote.">5</a>]</sup></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="сноски-внутри-других-конструкций">Сноски внутри других конструкций</h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p>пункт списка со сноской <sup class="footnote">[<a id="_footnoteref_6" class="footnote" href="#_footnotedef_6" title="View footnote.">6</a>]</sup></p>
+</li>
+<li>
+<p>второй пункт</p>
+</li>
+</ul>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Колонка</th>
+<th class="tableblock halign-left valign-top">Значение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">строка со сноской <sup class="footnote">[<a id="_footnoteref_7" class="footnote" href="#_footnotedef_7" title="View footnote.">7</a>]</sup></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">значение</p></td>
+</tr>
+</tbody>
+</table>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Абзац внутри example-блока со сноской.<sup class="footnote">[<a id="_footnoteref_8" class="footnote" href="#_footnotedef_8" title="View footnote.">8</a>]</sup></p>
+</div>
+</div>
+</div>
+<div class="quoteblock">
+<blockquote>
+<div class="paragraph">
+<p>Цитата со сноской.<sup class="footnote">[<a id="_footnoteref_9" class="footnote" href="#_footnotedef_9" title="View footnote.">9</a>]</sup></p>
+</div>
+</blockquote>
+<div class="attribution">
+&#8212; Автор
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="сноска-в-заголовке-раздела-1">Сноска в заголовке раздела <sup class="footnote">[<a id="_footnoteref_1" class="footnote" href="#_footnotedef_1" title="View footnote.">1</a>]</sup></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Абзац после заголовка со сноской.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="экранированная-сноска">Экранированная сноска</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Экранированный макрос footnote:[не сноска] остаётся текстом.</p>
+</div>
+</div>
+</div>
+<div id="footnotes">
+<hr>
+<div class="footnote" id="_footnotedef_1">
+<a href="#_footnoteref_1">1</a>. Сноска из заголовка раздела.
+</div>
+<div class="footnote" id="_footnotedef_1">
+<a href="#_footnoteref_1">1</a>. Текст первой сноски.
+</div>
+<div class="footnote" id="_footnotedef_2">
+<a href="#_footnoteref_2">2</a>. Текст второй сноски.
+</div>
+<div class="footnote" id="_footnotedef_3">
+<a href="#_footnoteref_3">3</a>. Asciidoctor.js 4.0.9, независимая реализация на JavaScript.
+</div>
+<div class="footnote" id="_footnotedef_4">
+<a href="#_footnoteref_4">4</a>. Внутри сноски работают <strong>полужирный</strong>, <code>моноширинный</code> и <a href="https://example.org">ссылка</a>.
+</div>
+<div class="footnote" id="_footnotedef_5">
+<a href="#_footnoteref_5">5</a>. Движок — Asciidoctor.js.
+</div>
+<div class="footnote" id="_footnotedef_6">
+<a href="#_footnoteref_6">6</a>. Сноска из пункта списка.
+</div>
+<div class="footnote" id="_footnotedef_7">
+<a href="#_footnoteref_7">7</a>. Сноска из ячейки таблицы.
+</div>
+<div class="footnote" id="_footnotedef_8">
+<a href="#_footnoteref_8">8</a>. Сноска из составного блока.
+</div>
+<div class="footnote" id="_footnotedef_9">
+<a href="#_footnoteref_9">9</a>. Сноска из цитаты.
+</div>
+</div>

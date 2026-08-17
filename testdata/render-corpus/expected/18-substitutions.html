@@ -1,0 +1,133 @@
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Группы подстановок: <code>specialchars</code>, <code>quotes</code>, <code>attributes</code>, <code>replacements</code>, <code>macros</code>, <code>post_replacements</code>.
+Порядок их применения — то место, где независимая реализация расходится с эталоном тише всего.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="passthrough-имеет-приоритет">Passthrough имеет приоритет</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>*не полужирный* и {attr} не раскрывается.
+__не курсив__ и <b>сырой HTML</b>.
+<code>{attr} внутри моноширинного без подстановок</code>.
+<em>сырой</em>, &lt; &gt; &amp;, <strong>полужирный</strong>, значение атрибута, <a href="https://example.org" class="bare">https://example.org</a>.
+Комбинация сокращений: <strong>полужирный</strong> и &lt; &gt;.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="управление-подстановками-на-блоке">Управление подстановками на блоке</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre>Листинг со всеми обычными подстановками: <strong>полужирный</strong>, значение атрибута, <a href="https://example.org">ссылка</a>.</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>Листинг с добавленной группой attributes: значение атрибута.
+Полужирный остаётся дословным: *текст*.</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>Спецсимволы не экранируются: <b>сырой</b>.</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>Дословный листинг, в котором дополнительно работает <strong>форматирование</strong>.</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>Никаких подстановок: <b>, {attr}, *текст*.</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Абзац с управлением подстановками:</p>
+</div>
+<div class="paragraph">
+<p>Только спецсимволы: &lt;b&gt; экранируется, *полужирный* остаётся текстом, {attr} не раскрывается.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="замены-группы-replacements">Замены группы replacements</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Многоточие&#8230;&#8203;, стрелки &#8594; &#8658; &#8592; &#8656;, тире --, знаки &#169; &#174; &#8482;.
+Дроби 1/2, 1/4, 3/4.
+Числовая ссылка &#8594; и именованная &rarr; и &amp; сам по себе.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="порядок-replacements-до-macros">Порядок: replacements до macros</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Ссылка со стрелкой в тексте: <a href="https://example.org">текст &#8594; продолжение</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="экранирование-против-подстановок">Экранирование против подстановок</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>*не полужирный*, {attr}, https://example.org[не ссылка], \NOTE: не врезка.
+Два слэша перед сдвоенным знаком: __экранировано__.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="подстановки-в-заголовках-и-атрибутах">Подстановки в заголовках и атрибутах</h2>
+<div class="sectionbody">
+<div class="exampleblock">
+<div class="title">Example 1. Заголовок блока с <strong>форматированием</strong> и значение атрибута</div>
+<div class="content">
+<div class="paragraph">
+<p>Содержимое блока.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="раздел-с-форматированием-и-значение-атрибута">Раздел с <strong>форматированием</strong> и значение атрибута</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Абзац после заголовка с подстановками.</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Ячейка с значение атрибута</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Ячейка с <strong>форматированием</strong></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="где-подстановки-не-применяются">Где подстановки не применяются</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre>Листинг: *форматирование* и {attr} дословны, но спецсимволы &lt; &gt; экранируются.</pre>
+</div>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Литеральный блок: то же самое, &lt; &gt; экранируются.</pre>
+</div>
+</div>
+<p>Passthrough-блок: *ничего* не подставляется, {attr} остаётся, &lt; отдаётся как есть.</p>
+</div>
+</div>

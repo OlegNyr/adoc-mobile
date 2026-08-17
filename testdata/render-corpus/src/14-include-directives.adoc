@@ -1,0 +1,60 @@
+= Директива include
+:idprefix:
+:idseparator: -
+:includedir: partials
+
+== Включение целиком
+
+include::partials/included-basic.adoc[]
+
+== Включение по номерам строк
+
+include::partials/included-lines.adoc[lines=1..3]
+
+Дальше — только пятая и седьмая строки того же файла:
+
+include::partials/included-lines.adoc[lines=5;7]
+
+== Включение по тегам
+
+include::partials/included-tagged.adoc[tag=first]
+
+include::partials/included-tagged.adoc[tag=second]
+
+include::partials/included-tagged.adoc[tags=first;second]
+
+== Включение со сдвигом уровней
+
+include::partials/included-sections.adoc[leveloffset=+1]
+
+== Включение исходного кода в листинг
+
+[source,kotlin]
+----
+include::partials/Sample.kt[]
+----
+
+Фрагмент по тегу:
+
+[source,kotlin]
+----
+include::partials/Sample.kt[tag=render, indent=0]
+----
+
+== Включение через атрибут в пути
+
+include::{includedir}/included-basic.adoc[]
+
+== Include внутри дословного блока
+
+Директива обрабатывается до разбора структуры и работает даже внутри листинга:
+
+----
+include::partials/included-lines.adoc[lines=1]
+----
+
+== Экранированная директива
+
+\include::partials/included-basic.adoc[]
+
+Строка выше остаётся текстом.

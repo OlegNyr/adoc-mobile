@@ -1,0 +1,113 @@
+<div class="sect1">
+<h2 id="автоссылки">Автоссылки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Голый адрес <a href="https://example.org" class="bare">https://example.org</a> попадает в вывод как ссылка.
+Адрес в конце предложения <a href="https://example.org" class="bare">https://example.org</a>.
+Адрес в скобках (<a href="https://example.org" class="bare">https://example.org</a>) и через запятую <a href="https://example.org" class="bare">https://example.org</a>, дальше текст.
+Схемы <a href="ftp://example.org" class="bare">ftp://example.org</a> и <a href="irc://example.org" class="bare">irc://example.org</a> тоже распознаются.
+Почта <a href="mailto:user@example.org">user@example.org</a> распознаётся без макроса.
+Угловая форма <a href="https://example.org" class="bare">https://example.org</a> скобки в вывод не отдаёт.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="макрос-link">Макрос link</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><a href="https://example.org">текст ссылки</a>
+<a href="https://example.org" class="bare">https://example.org</a>
+<a href="https://example.org" target="_blank" rel="noopener">текст</a>
+<a href="https://example.org" target="_blank" rel="noopener">текст</a>
+<a href="https://example.org/repo/tree/main">ссылка из атрибута</a>
+<a href="https://example.org/path_with_underscores^and^carets">экранированная цель</a>
+<a href="file.html">локальный файл</a></p>
+</div>
+<div class="paragraph">
+<p>Ссылка с ролью: <a href="https://example.org" class="external">текст</a>.
+Ссылка с заголовком: <a href="https://example.org" title="Подсказка">текст</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="почта">Почта</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><a href="mailto:user@example.org">написать</a>
+<a href="mailto:user@example.org?subject=%D0%A2%D0%B5%D0%BC%D0%B0&amp;body=%D0%A2%D0%B5%D0%BA%D1%81%D1%82%20%D0%BF%D0%B8%D1%81%D1%8C%D0%BC%D0%B0">Тема письма</a></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="изображения">Изображения</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Строчное изображение <span class="image"><img src="partials/point.svg" alt="Точка" width="16" height="16"></span> внутри абзаца.
+С ролью и заголовком: <span class="image icon"><img src="partials/point.svg" alt="Точка" width="16" height="16" title="Подсказка"></span>.
+Изображение-ссылка: <span class="image"><a class="image" href="https://example.org"><img src="partials/point.svg" alt="Точка" width="16" height="16"></a></span>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="сноски">Сноски</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Первая сноска.<sup class="footnote">[<a id="_footnoteref_1" class="footnote" href="#_footnotedef_1" title="View footnote.">1</a>]</sup>
+Именованная сноска.<sup class="footnote" id="_footnote_named">[<a id="_footnoteref_2" class="footnote" href="#_footnotedef_2" title="View footnote.">2</a>]</sup>
+Повторная ссылка на неё.<sup class="footnoteref">[<a class="footnote" href="#_footnotedef_2" title="View footnote.">2</a>]</sup></p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="passthrough">Passthrough</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Строчный <code>{нераскрытый}</code> и *не полужирный*.
+Двойная форма __не курсив__ и тройная <b>сырой HTML</b>.
+Макрос <em>сырой</em> и спецсимволы &lt; &gt; &amp; и <strong>полужирный</strong> через pass.
+Моноширинный без подстановок: <code>{project}</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="ui-макросы">UI-макросы</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Сочетание клавиш <span class="keyseq"><kbd>Ctrl</kbd>+<kbd>T</kbd></span> и одиночная клавиша <kbd>F5</kbd>.
+Кнопка <b class="button">OK</b> и <b class="button">Отмена</b>.
+Пункт меню <span class="menuseq"><b class="menu">Вид</b>&#160;<b class="caret">&#8250;</b> <b class="submenu">Масштаб</b>&#160;<b class="caret">&#8250;</b> <b class="menuitem">Сбросить</b></span>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="указатель">Указатель</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Термин в указателе AsciiDoc внутри текста.
+Скрытый термин .
+Составной .</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="прочее">Прочее</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Строчный якорь <a id="inline-anchor"></a>в середине абзаца.
+Строчный якорь макросом <a id="macro-anchor"></a> рядом.
+Ссылка на строчный якорь: <a href="#inline-anchor">строчный якорь</a>.</p>
+</div>
+<div class="paragraph">
+<p>Знак градуса 20&#176;C и обратный апостроф ` как символ.</p>
+</div>
+</div>
+</div>
+<div id="footnotes">
+<hr>
+<div class="footnote" id="_footnotedef_1">
+<a href="#_footnoteref_1">1</a>. Текст первой сноски.
+</div>
+<div class="footnote" id="_footnotedef_2">
+<a href="#_footnoteref_2">2</a>. Текст именованной сноски.
+</div>
+</div>

@@ -1,0 +1,121 @@
+{
+  "generated": "2026-08-17",
+  "renderer": "Asciidoctor 2.0.26 [https://asciidoctor.org]",
+  "options": {
+    "backend": "html5",
+    "doctype": "article",
+    "standalone": false,
+    "safe_mode": "safe",
+    "attributes": []
+  },
+  "files": {
+    "01-document-attributes.adoc": {
+      "source_sha256": "61c4c2c92895e7f638987d5b84b27c5067ea1fc514902014dc18ebbe211374c7",
+      "html_sha256": "de7ed17020f1d1d91fe0b7ae6f0d1f22ce752f00e2849f431ed84ad919cb335c",
+      "canonical_lines": 130,
+      "warnings": 0
+    },
+    "02-inline-formatting.adoc": {
+      "source_sha256": "69f99c68d2dad9840c0386e5d4159b33f2eebcccb4b3c064f8b56573d19f6cb5",
+      "html_sha256": "b2e3f13c95b71c8e87e614a16a47c8182a1857e0c16b02aaf262f344dcfba8ec",
+      "canonical_lines": 254,
+      "warnings": 0
+    },
+    "03-lists-basic.adoc": {
+      "source_sha256": "20e847c1e74cf082dcc8e16f9c16653777381ba4011e719ac2de734f08d42397",
+      "html_sha256": "30b9d5d3461d0d38dbdb8115ea44e57cd8e126eab3ef9e164c05cc1857bc6bfb",
+      "canonical_lines": 461,
+      "warnings": 0
+    },
+    "04-lists-description.adoc": {
+      "source_sha256": "351abc83489da6228ca93c88f51bcf6dd197785d84e8a0e732d761bb0e7639aa",
+      "html_sha256": "00a7c89e5f7bef5d78937b6d7b884d83b5adde392b21f70711ca83f039aa151f",
+      "canonical_lines": 311,
+      "warnings": 0
+    },
+    "05-admonitions.adoc": {
+      "source_sha256": "13361ec123efada9655d9311d73be83fca18fc7acd2dcd614cbc181729557ce9",
+      "html_sha256": "fdfc716b3d16c8dff53080e53a3f26617fac6ed77699777ae2f4a5fe1e411121",
+      "canonical_lines": 429,
+      "warnings": 0
+    },
+    "06-code-blocks.adoc": {
+      "source_sha256": "a77f85c297409fe4c09ce625ef275018569e3bb0836effe666d6718d91f1d803",
+      "html_sha256": "d796209226e538a96cac13adf6d1f132f83224ffc4d49b417a1013779fd10ae7",
+      "canonical_lines": 343,
+      "warnings": 0
+    },
+    "07-tables-basic.adoc": {
+      "source_sha256": "d415cc36c734e0087a356a27a0784b533b02341b6295e3405c17b83db170eec3",
+      "html_sha256": "1632d3ae19da44b90110896eb1a05ac389b3bc52d2ce4680e2b419344db2c7d3",
+      "canonical_lines": 736,
+      "warnings": 0
+    },
+    "08-tables-cell-specs.adoc": {
+      "source_sha256": "ffcf70955b82149e8ee9250f880c7410f016906b797f44ec6a458a38c8fe3cda",
+      "html_sha256": "42cbec0a18c7e368507006e097eb3e150500c722caf4b704eda4814ea2e24015",
+      "canonical_lines": 790,
+      "warnings": 0
+    },
+    "09-delimited-blocks.adoc": {
+      "source_sha256": "d46363e6f2b3f548844bc094d3a3e658eef24369a8ef7224f933dee29b65512f",
+      "html_sha256": "bc36288ccdc913364d31badaf688f7c39bde109c8084d84d486ba86e72aec521",
+      "canonical_lines": 391,
+      "warnings": 0
+    },
+    "10-macros-inline.adoc": {
+      "source_sha256": "1a4869d7b82938f13b081f0963b98f4a7c05faf882129fffe203eabff325a66d",
+      "html_sha256": "e7ab4f029357f78d9982e797459c510219541acdb01552dd316eeae28b052ec7",
+      "canonical_lines": 316,
+      "warnings": 0
+    },
+    "11-macros-block.adoc": {
+      "source_sha256": "5dfc98389d233217736a30d325efa26d088d2d839dd20c4f7c6e399f890d05a4",
+      "html_sha256": "d378c8248be64f249c648cb5caa8f931b9f2961a8ca1acadebd9d68f3dfd18c2",
+      "canonical_lines": 147,
+      "warnings": 0
+    },
+    "12-xrefs-anchors.adoc": {
+      "source_sha256": "04361048c69149017f255b6282b5f9015254d8f279f6888cfb7d5766541813cb",
+      "html_sha256": "68a99752f1e06a642c2384e3e4b11888d243676209045c83247cc952b6efd6f7",
+      "canonical_lines": 279,
+      "warnings": 0
+    },
+    "13-footnotes.adoc": {
+      "source_sha256": "ae536e91ab86916ac5638e058152212f9384e81cbf179b63ac403a84d0de648a",
+      "html_sha256": "938091884165a25923d22e170c70fe107ac695da199c93d7bd176600bf9a9d8a",
+      "canonical_lines": 295,
+      "warnings": 0
+    },
+    "14-include-directives.adoc": {
+      "source_sha256": "2cd59fd800100010ca2ccba544db61ff06addd99ed41385b669d8ce525efc432",
+      "html_sha256": "d4632414f94d7183940e2baabd023671696f83897690915dd81e94ac24815223",
+      "canonical_lines": 242,
+      "warnings": 0
+    },
+    "15-conditional-directives.adoc": {
+      "source_sha256": "c6ce89471bd55213a68029aea1c364603006432bf5c3477444dc642478777a28",
+      "html_sha256": "e5bb3622595bc5ebdfba4ff107c1ae228cd45994eeacd47e98d9bf313b870206",
+      "canonical_lines": 187,
+      "warnings": 0
+    },
+    "16-sections-and-toc.adoc": {
+      "source_sha256": "77898d27095410a66424c743ac21e9b177546948386ac02588380f4e487536b2",
+      "html_sha256": "24a3ab73d08783f76e8bd0417f28e8facfdb1d51125d06877b35c6e75783c360",
+      "canonical_lines": 385,
+      "warnings": 0
+    },
+    "17-unicode-and-russian.adoc": {
+      "source_sha256": "16f50c198eecbf979475d08598c4210b6f14a2930b2501fa824b5967dedf80a7",
+      "html_sha256": "26bbc6ab78e71a95c8a789f3b62e89ff944c45137bcceef7e9417121a40f72dd",
+      "canonical_lines": 294,
+      "warnings": 0
+    },
+    "18-substitutions.adoc": {
+      "source_sha256": "46a57fec2445f1091ae194c6d7cfda870984ec58b428b2948c2dd91ac55ee4dc",
+      "html_sha256": "6f0fc090c2e6d9188b38c1a7bacb172f1315311cea22d02c053ab2a83fcb82ae",
+      "canonical_lines": 265,
+      "warnings": 0
+    }
+  }
+}

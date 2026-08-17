@@ -1,0 +1,122 @@
+<div class="sect1">
+<h2 id="constrained-и-unconstrained">Constrained и unconstrained</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Полужирный <strong>текст</strong> и unconstrained <strong>текст</strong>.
+Курсив <em>текст</em> и unconstrained <em>текст</em>.
+Моноширинный <code>текст</code> и unconstrained <code>текст</code>.
+Выделение <mark>текст</mark> и unconstrained <mark>текст</mark>.</p>
+</div>
+<div class="paragraph">
+<p>Отрицательные случаи: foo*bar*baz не полужирный, foo_bar_baz не курсив.
+Документированный положительный случай: The <em>kernel qualifier is </em>important.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="порядок-вложения">Порядок вложения</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Фиксированный порядок: <code><strong><em>моноширинный полужирный курсив</em></strong></code>.
+Полужирный курсив: <strong><em>текст</em></strong>.
+Курсив внутри полужирного внутри моноширинного: <code><strong><em>вложение</em></strong></code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="надстрочный-и-подстрочный">Надстрочный и подстрочный</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Формула H<sub>2</sub>O и степень x<sup>2</sup> рядом в одной строке.
+Пробел внутри вставляется только так: a<sup>b c</sup>.
+Не срабатывает, когда текст с пробелами: a ~ b ~ c и x ^ y ^ z.
+Бытовой текст с тильдой: путь ~/projects и второй ~/bin.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="роли-и-выделение">Роли и выделение</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><span class="underline">подчёркнутый</span>, <span class="line-through">зачёркнутый</span>, <span class="small">мелкий</span>.
+Роль на unconstrained-паре: <span class="big">текст</span>.
+Полужирный с ролью: <strong class="role-name">текст</strong>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="типографские-кавычки">Типографские кавычки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Двойные &#8220;цитата&#8221; и одинарные &#8216;цитата&#8217;.
+Моноширинный <code>код</code> для сравнения.
+Кавычки вокруг моноширинного: &#8220;`код`&#8221;.
+Апостроф в слове: Sam&#8217;s, и экранированный Sam's.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="замены">Замены</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Многоточие&#8230;&#8203; стрелки &#8594; и &#8658; и &#8592; и &#8656;, тире&#8201;&#8212;&#8201;между словами.
+Копирайт &#169;, торговая марка &#8482;, зарегистрированный знак &#174;.
+Дробь 1/2 и минус в диапазоне 5&#8212;&#8203;7.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="жёсткие-переносы">Жёсткие переносы</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Первая строка<br>
+вторая строка после жёсткого переноса.</p>
+</div>
+<div class="paragraph">
+<p>Абзац целиком с переносами<br>
+каждая строка отдельно<br>
+третья строка.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="экранирование">Экранирование</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Экранированный *не полужирный*, экранированный _не курсив_.
+Для сдвоенных знаков нужны два слэша: __экранировано__, а <em>_не экранировано_</em>.
+Экранированный обратный апостроф: `не моноширинный`.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="литеральный-абзац-по-отступу">Литеральный абзац по отступу</h2>
+<div class="sectionbody">
+<div class="literalblock">
+<div class="content">
+<pre>Строка с ведущим пробелом становится литеральным блоком.
+Вторая строка того же литерального абзаца.</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Обычный абзац после литерального.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="разрывы">Разрывы</h2>
+<div class="sectionbody">
+<hr>
+<div class="paragraph">
+<p>Текст между разрывами.</p>
+</div>
+<hr>
+<div class="paragraph">
+<p>Текст после markdown-варианта разрыва.</p>
+</div>
+<div style="page-break-after: always;"></div>
+<div class="paragraph">
+<p>Текст после разрыва страницы.</p>
+</div>
+</div>
+</div>

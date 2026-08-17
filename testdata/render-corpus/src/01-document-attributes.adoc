@@ -1,0 +1,61 @@
+= Атрибуты документа
+Иван Петров <ivan@example.org>
+v1.2, 2026-08-17: тестовая ревизия
+:doctype: article
+:project: AsciiDoc Mobile
+:version: 4.0.9
+:url-docs: https://docs.asciidoctor.org
+:empty-attr:
+:soft-wrap: первая часть значения \
+второй кусок того же значения
+:hard-wrap: строка значения + \
+следующая строка значения
+:idprefix:
+:idseparator: -
+
+Проект {project} версии {version}, документация лежит на {url-docs}.
+
+Заголовок документа доступен как {doctitle}, автор — {author}, почта — {email}.
+Ревизия {revnumber} от {revdate}, примечание к ревизии: {revremark}.
+
+Пустой атрибут даёт пустую подстановку: «{empty-attr}».
+
+Мягкий перенос значения: {soft-wrap}.
+
+Жёсткий перенос значения: {hard-wrap}.
+
+== Встроенные атрибуты подстановки
+
+Пробел {sp} между словами, неразрывный{nbsp}пробел, нулевой{zwsp}пробел.
+Символы: {amp}, {plus}, {startsb}в скобках{endsb}, {vbar}, {cpp}, {caret}, {asterisk}, {tilde}, {backslash}, {brvbar}.
+Типографика: {two-colons}, {two-semicolons}, {lsquo}цитата{rsquo}, {ldquo}цитата{rdquo}, {deg}, {apos}.
+
+== Экранирование ссылки на атрибут
+
+Экранированная ссылка \{project} остаётся текстом.
+Ссылка на несуществующий атрибут {no-such-attribute} по умолчанию остаётся как есть.
+
+== Присваивание и сброс по ходу документа
+
+Счётчик: {counter:seq}, {counter:seq}, {counter:seq}.
+Счётчик с буквами: {counter:letter:a}, {counter:letter}, {counter:letter}.
+
+:project: AsciiDoc Mobile (переопределён)
+
+После переопределения: {project}.
+
+:!version:
+
+После сброса `:!version:` ссылка выглядит так: {version}.
+
+== Атрибут внутри разметки
+
+Ссылка на {url-docs}[документацию] строится из атрибута.
+
+.Заголовок блока со ссылкой на {project}
+====
+Атрибуты раскрываются и в заголовке блока, и в содержимом составного блока: {project}.
+====
+
+Внутри моноширинного текста атрибут раскрывается: `{project}`.
+Внутри passthrough — нет: `+{project}+`.

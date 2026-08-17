@@ -1,0 +1,75 @@
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Проект AsciiDoc Mobile версии 4.0.9, документация лежит на <a href="https://docs.asciidoctor.org" class="bare">https://docs.asciidoctor.org</a>.</p>
+</div>
+<div class="paragraph">
+<p>Заголовок документа доступен как Атрибуты документа, автор — Иван Петров, почта — <a href="mailto:ivan@example.org">ivan@example.org</a>.
+Ревизия 1.2 от 2026-08-17, примечание к ревизии: тестовая ревизия.</p>
+</div>
+<div class="paragraph">
+<p>Пустой атрибут даёт пустую подстановку: «».</p>
+</div>
+<div class="paragraph">
+<p>Мягкий перенос значения: первая часть значения второй кусок того же значения.</p>
+</div>
+<div class="paragraph">
+<p>Жёсткий перенос значения: строка значения<br>
+следующая строка значения.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="встроенные-атрибуты-подстановки">Встроенные атрибуты подстановки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Пробел   между словами, неразрывный&#160;пробел, нулевой&#8203;пробел.
+Символы: &, &#43;, [в скобках], |, C&#43;&#43;, ^, *, ~, \, &#166;.
+Типографика: ::, ;;, &#8216;цитата&#8217;, &#8220;цитата&#8221;, &#176;, &#39;.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="экранирование-ссылки-на-атрибут">Экранирование ссылки на атрибут</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Экранированная ссылка {project} остаётся текстом.
+Ссылка на несуществующий атрибут {no-such-attribute} по умолчанию остаётся как есть.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="присваивание-и-сброс-по-ходу-документа">Присваивание и сброс по ходу документа</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Счётчик: 1, 2, 3.
+Счётчик с буквами: a, b, c.</p>
+</div>
+<div class="paragraph">
+<p>После переопределения: AsciiDoc Mobile (переопределён).</p>
+</div>
+<div class="paragraph">
+<p>После сброса <code>:!version:</code> ссылка выглядит так: {version}.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="атрибут-внутри-разметки">Атрибут внутри разметки</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Ссылка на <a href="https://docs.asciidoctor.org">документацию</a> строится из атрибута.</p>
+</div>
+<div class="exampleblock">
+<div class="title">Example 1. Заголовок блока со ссылкой на AsciiDoc Mobile (переопределён)</div>
+<div class="content">
+<div class="paragraph">
+<p>Атрибуты раскрываются и в заголовке блока, и в содержимом составного блока: AsciiDoc Mobile (переопределён).</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>Внутри моноширинного текста атрибут раскрывается: <code>AsciiDoc Mobile (переопределён)</code>.
+Внутри passthrough — нет: <code>{project}</code>.</p>
+</div>
+</div>
+</div>

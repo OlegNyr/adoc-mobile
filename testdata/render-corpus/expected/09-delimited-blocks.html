@@ -1,0 +1,283 @@
+<div class="sect1">
+<h2 id="example">Example</h2>
+<div class="sectionbody">
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Составной блок: содержит абзацы и другие блоки.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>пункт списка внутри example</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="exampleblock">
+<div class="title">Example 1. Заголовок примера</div>
+<div class="content">
+<div class="paragraph">
+<p>Пронумерованный пример с заголовком.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="sidebar">Sidebar</h2>
+<div class="sectionbody">
+<div class="sidebarblock">
+<div class="content">
+<div class="paragraph">
+<p>Боковая врезка.</p>
+</div>
+<div class="paragraph">
+<p>Второй абзац боковой врезки.</p>
+</div>
+</div>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="title">Заголовок sidebar</div>
+<div class="paragraph">
+<p>Боковая врезка с заголовком.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="quote-и-verse">Quote и verse</h2>
+<div class="sectionbody">
+<div class="quoteblock">
+<blockquote>
+<div class="paragraph">
+<p>Цитата с указанием автора и источника.</p>
+</div>
+</blockquote>
+<div class="attribution">
+&#8212; Иван Петров<br>
+<cite>Название источника</cite>
+</div>
+</div>
+<div class="quoteblock">
+<blockquote>
+<div class="paragraph">
+<p>Цитата без атрибуции.</p>
+</div>
+<div class="paragraph">
+<p>Второй абзац цитаты.</p>
+</div>
+</blockquote>
+</div>
+<div class="verseblock">
+<pre class="content">Строка стиха
+    с сохранённым отступом
+и переносами</pre>
+<div class="attribution">
+&#8212; Автор<br>
+<cite>Произведение</cite>
+</div>
+</div>
+<div class="paragraph">
+<p>Абзацная форма цитаты:</p>
+</div>
+<div class="quoteblock">
+<blockquote>
+Одна строка цитаты без ограничителя.
+</blockquote>
+<div class="attribution">
+&#8212; Автор
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="open">Open</h2>
+<div class="sectionbody">
+<div class="openblock">
+<div class="content">
+<div class="paragraph">
+<p>Открытый блок с ограничителем минимальной длины два.</p>
+</div>
+<div class="paragraph">
+<p>Второй абзац.</p>
+</div>
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>Открытый блок под меткой врезки.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="passthrough">Passthrough</h2>
+<div class="sectionbody">
+<div class="raw-html">Сырой HTML попадает в вывод без изменений: *звёздочки* остаются.</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="comment">Comment</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Абзац после комментариев.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="literal-и-listing-рядом">Literal и listing рядом</h2>
+<div class="sectionbody">
+<div class="literalblock">
+<div class="content">
+<pre>literal</pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>listing</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="вложенность-одного-типа-через-разную-длину-ограничителя">Вложенность одного типа через разную длину ограничителя</h2>
+<div class="sectionbody">
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Внешний example длины шесть.</p>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Вложенный example длины четыре.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>список внутри вложенного блока</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>Конец внешнего блока.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="вложенность-разных-типов">Вложенность разных типов</h2>
+<div class="sectionbody">
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Example, содержащий sidebar:</p>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="paragraph">
+<p>Sidebar внутри example.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre>listing внутри sidebar внутри example</pre>
+</div>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>И цитату:</p>
+</div>
+<div class="quoteblock">
+<blockquote>
+<div class="paragraph">
+<p>Цитата внутри example.</p>
+</div>
+</blockquote>
+<div class="attribution">
+&#8212; Автор
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="маскарад-метка-меняет-смысл-ограничителя">Маскарад: метка меняет смысл ограничителя</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="content">
+<pre>Стиль listing поверх литерального ограничителя.</pre>
+</div>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="paragraph">
+<p>Стиль quote поверх example-ограничителя.</p>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>Абзац после блока-комментария.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="сворачиваемый-блок">Сворачиваемый блок</h2>
+<div class="sectionbody">
+<details>
+<summary class="title">Показать подробности</summary>
+<div class="content">
+<div class="paragraph">
+<p>Содержимое, скрытое до раскрытия.</p>
+</div>
+</div>
+</details>
+<details open>
+<summary class="title">Развёрнутый по умолчанию</summary>
+<div class="content">
+<div class="paragraph">
+<p>Содержимое, видимое сразу.</p>
+</div>
+</div>
+</details>
+</div>
+</div>
+<div class="sect1">
+<h2 id="роли-и-идентификаторы-на-блоках">Роли и идентификаторы на блоках</h2>
+<div class="sectionbody">
+<div id="block-id" class="exampleblock block-role">
+<div class="content">
+<div class="paragraph">
+<p>Блок с идентификатором и ролью.</p>
+</div>
+</div>
+</div>
+<div class="paragraph lead">
+<p>Абзац с ролью lead.</p>
+</div>
+<div class="quoteblock abstract">
+<blockquote>
+<div class="paragraph">
+<p>Блок-аннотация.</p>
+</div>
+</blockquote>
+</div>
+</div>
+</div>
