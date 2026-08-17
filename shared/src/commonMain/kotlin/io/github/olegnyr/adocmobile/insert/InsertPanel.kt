@@ -63,10 +63,8 @@ import io.github.olegnyr.adocmobile.theme.adocTextStyle
  * касанием, поэтому клавиатура остаётся открытой и набор продолжается в
  * позиции каретки из заготовки (`FR-12`).
  *
- * В `SL-1` вставку несут инлайн-кнопки `*B*`, `_I_`, `` `c` `` — их формы
- * зафиксированы аналитикой. Остальные кнопки нарисованы по макету, но касание
- * не обрабатывают: строчные конструкции и `link`/`img` подключает `SL-2`
- * (решения `OQ-2`, `OQ-5`), раскрытие `›` — `SL-3` (`OQ-1`).
+ * Вставку несёт весь базовый ряд (`SL-2`, решения `OQ-2` и `OQ-5`); одна
+ * кнопка без действия — раскрытие `›`, его подключает `SL-3` (`OQ-1`).
  *
  * @param state единственный `TextFieldState` экрана (`FR-6`) — тот же
  * экземпляр, что у полотна редактора; своего состояния текста панель не
@@ -96,18 +94,17 @@ fun InsertPanel(state: TextFieldState, modifier: Modifier = Modifier) {
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Строчные конструкции — вставку подключает SL-2 (OQ-2).
             PanelButton(
                 label = "=",
                 description = "Заголовок документа",
                 labelColor = AdocTheme.colors.accentText,
-                onTap = null,
+                onTap = { state.applyInsert(InsertConstructs.documentTitle) },
             )
             PanelButton(
                 label = "==",
                 description = "Заголовок раздела",
                 labelColor = AdocTheme.colors.accentText,
-                onTap = null,
+                onTap = { state.applyInsert(InsertConstructs.sectionTitle) },
             )
             PanelButton(
                 label = "*B*",
@@ -133,22 +130,21 @@ fun InsertPanel(state: TextFieldState, modifier: Modifier = Modifier) {
                 label = "*",
                 description = "Маркер списка",
                 labelColor = AdocTheme.colors.textSecondary,
-                onTap = null,
+                onTap = { state.applyInsert(InsertConstructs.listItem) },
             )
-            // Заготовки с решёнными формами (OQ-5) — вставку подключает SL-2.
             PanelButton(
                 label = "link",
                 description = "Ссылка",
                 labelColor = AdocTheme.colors.textSecondary,
                 fontSize = 12.sp,
-                onTap = null,
+                onTap = { state.applyInsert(InsertConstructs.link) },
             )
             PanelButton(
                 label = "img",
                 description = "Изображение",
                 labelColor = AdocTheme.colors.textSecondary,
                 fontSize = 12.sp,
-                onTap = null,
+                onTap = { state.applyInsert(InsertConstructs.image) },
             )
             // Раскрытие дополнительных конструкций — SL-3 (OQ-1).
             PanelButton(
@@ -168,10 +164,11 @@ fun InsertPanel(state: TextFieldState, modifier: Modifier = Modifier) {
  * ([AdocTypography.editorCode]; кегль 12 для словесных подписей — из бандла),
  * рамка ролью `borderObject` (`FR-5`).
  *
- * Нажатие показано рамкой и фоном, не только цветом (`NFR-9`): пара
- * «акцентная рамка + фон выбора» из раздела «Состояния и взаимодействие»
- * описания дизайна. Системная индикация (ripple) выключена — «браузерные и
- * системные дефолты не используются».
+ * Нажатие показано фоном роли `pressed` — «Состояния и взаимодействие»
+ * описания дизайна описывают нажатие вторичных объектов фоном, рамка не
+ * меняется; постоянная рамка и смена фона вместе дают отличие не только
+ * цветом текста (`NFR-9`). Системная индикация (ripple) выключена —
+ * «браузерные и системные дефолты не используются».
  *
  * У кнопки — русское семантическое описание конструкции, а не только глиф
  * (`NFR-9`): скринридер читает [description].
@@ -193,8 +190,7 @@ private fun PanelButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val fill = if (pressed) AdocTheme.colors.accentSelection else Color.Transparent
-    val borderColor = if (pressed) AdocTheme.colors.accent else AdocTheme.colors.borderObject
+    val fill = if (pressed) AdocTheme.colors.pressed else Color.Transparent
 
     val clickModifier = if (onTap != null) {
         Modifier.clickable(
@@ -212,7 +208,7 @@ private fun PanelButton(
             .widthIn(min = minWidth)
             .height(38.dp)
             .background(fill)
-            .border(1.dp, borderColor)
+            .border(1.dp, AdocTheme.colors.borderObject)
             .then(clickModifier)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -63,6 +65,7 @@ import io.github.olegnyr.adocmobile.document.DocumentEditor
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
 import io.github.olegnyr.adocmobile.document.TreeSource
+import io.github.olegnyr.adocmobile.insert.InsertPanel
 import io.github.olegnyr.adocmobile.preview.AdocPreview
 import io.github.olegnyr.adocmobile.preview.PreviewFailure
 import io.github.olegnyr.adocmobile.preview.PreviewImageSource
@@ -160,6 +163,12 @@ fun EditorScreen(
             val selectedTab = EditorTab.valueOf(selectedTabName)
             val focusManager = LocalFocusManager.current
 
+            // Фокус поля ввода управляет видимостью панели вставки (OQ-3 фичи
+            // 006): фокус есть — панель есть, независимо от IME. Не в
+            // rememberSaveable намеренно: фокус — преходящее состояние, после
+            // поворота его выдаёт заново само поле.
+            var fieldFocused by remember { mutableStateOf(false) }
+
             // Честный сигнал видимости превью (FR-13): вкладка выбрана, документ
             // открыт и приложение на переднем плане — всё три сразу. Модель
             // идемпотентна, поэтому рекомпозиция с тем же значением безвредна.
@@ -233,13 +242,17 @@ fun EditorScreen(
                             // Полотно остаётся в композиции и на вкладке превью:
                             // так каретка и прокрутка не сбрасываются (FR-3,
                             // якорь «не пересоздавать полотно» из спеки).
+                            // Отступы навигации и IME полотно больше не несёт:
+                            // их несёт нижний элемент колонки — панель вставки
+                            // или спейсер (фича 006, FR-1: между панелью и
+                            // клавиатурой не остаётся разрыва). Каретка видима
+                            // над панелью, потому что вьюпорт поля кончается на
+                            // её верхней кромке (NFR-7, FR-2 фичи 006).
                             AdocEditor(
                                 state = textFieldState,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .navigationBarsPadding()
-                                    // Каретка не уходит под клавиатуру (NFR-7).
-                                    .imePadding()
+                                    .onFocusChanged { fieldFocused = it.isFocused }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                             )
                             // Панель превью не покидает композицию при уходе на
@@ -274,6 +287,31 @@ fun EditorScreen(
                             browsing = document,
                             onOpenDocument = model::open,
                             onOpenFolder = openFolder,
+                        )
+                    }
+                }
+
+                if (document is EditorDocument.Open && selectedTab == EditorTab.Editor) {
+                    // Слот строки проблем (поток 9, US-E2-05): встанет здесь,
+                    // между полотном и панелью вставки, — раскладка место
+                    // оставляет, содержимого у слота пока нет.
+
+                    if (fieldFocused) {
+                        // Панель вставки (фича 006): отступы навигации и IME
+                        // несёт её контейнер — добавлять imePadding здесь
+                        // нельзя, зазор удвоится.
+                        InsertPanel(
+                            state = textFieldState,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        // Без панели те же отступы держит спейсер: полотно не
+                        // уходит ни под навигацию, ни под клавиатуру (NFR-7).
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .imePadding(),
                         )
                     }
                 }
@@ -461,15 +499,35 @@ private fun MenuItem(label: String, enabled: Boolean = true, onClick: () -> Unit
     )
 }
 
+/** Действие сочетания аппаратной клавиатуры (`FR-17`, `FR-13` фичи 004). */
+internal enum class UndoShortcut { Undo, Redo }
+
 /**
- * Undo/redo с аппаратной клавиатуры (`FR-17`): сочетания — `Ctrl+Z` /
- * `Ctrl+Shift+Z`, как записано в `TC-15` (фича 004 `FR-13` самих сочетаний не
- * называет). Событие поглощается, чтобы встроенная обработка поля не отменила
- * второй раз; недоступное действие — тот же тихий no-op, что в меню.
+ * Соответствие «клавиши → действие» — решение владельца 2026-08-17, записано
+ * в `FR-13` фичи 004: `Ctrl+Z` — отменить; `Ctrl+Shift+Z` и `Ctrl+Y` —
+ * повторить. Чистая функция, отделённая от [KeyEvent]: платформенное событие
+ * в `commonTest` не собрать, а таблица сочетаний обязана быть под смоуком.
+ */
+internal fun undoShortcutFor(key: Key, ctrl: Boolean, shift: Boolean): UndoShortcut? = when {
+    !ctrl -> null
+    key == Key.Y -> UndoShortcut.Redo
+    key == Key.Z && shift -> UndoShortcut.Redo
+    key == Key.Z -> UndoShortcut.Undo
+    else -> null
+}
+
+/**
+ * Undo/redo с аппаратной клавиатуры (`FR-17`): сочетания — [undoShortcutFor].
+ * Событие поглощается, чтобы встроенная обработка поля не отменила второй раз;
+ * недоступное действие — тот же тихий no-op, что в меню.
  */
 private fun KeyEvent.undoShortcutHandled(model: EditorScreenModel): Boolean {
-    if (type != KeyEventType.KeyDown || !isCtrlPressed || key != Key.Z) return false
-    if (isShiftPressed) model.redoRequested() else model.undoRequested()
+    if (type != KeyEventType.KeyDown) return false
+    val shortcut = undoShortcutFor(key, ctrl = isCtrlPressed, shift = isShiftPressed) ?: return false
+    when (shortcut) {
+        UndoShortcut.Undo -> model.undoRequested()
+        UndoShortcut.Redo -> model.redoRequested()
+    }
     return true
 }
 

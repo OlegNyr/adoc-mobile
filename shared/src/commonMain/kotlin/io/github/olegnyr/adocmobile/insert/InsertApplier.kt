@@ -48,6 +48,8 @@ fun insertEditFor(
     }
     return when (construct) {
         is InlineWrap -> inlineWrapEdit(construct, text, start, end)
+        is LinePrefix -> linePrefixEdit(construct, text, start, end)
+        is MacroTemplate -> macroTemplateEdit(construct, text, start, end)
     }
 }
 
@@ -80,6 +82,127 @@ private fun inlineWrapEdit(construct: InlineWrap, text: CharSequence, start: Int
         selectionStart = caret,
         selectionEnd = caret,
     )
+}
+
+/**
+ * Строчная конструкция (`FR-10`, решения `OQ-2`).
+ *
+ * Одна строка (каретка, выделение внутри строки или заголовок при любом
+ * выделении): префикс в начало логической строки; повтор — переключатель,
+ * префикс на строке, уже начинающейся с него, снимается. Позиции выделения
+ * сдвигаются на длину префикса; при снятии — прижимаются к началу строки,
+ * если стояли внутри снятого префикса.
+ *
+ * Многострочное выделение у конструкции с [LinePrefix.eachSelectedLine]
+ * (список): маркер на каждую строку выделения; строка, которой выделение
+ * касается только позицией конца в её начале, не в счёт — выделено в ней ноль
+ * символов. Переключателя здесь нет: решение `OQ-2` для этого случая называет
+ * только «маркер на каждую строку». Всё — одна замена диапазона, то есть один
+ * шаг отмены.
+ */
+private fun linePrefixEdit(construct: LinePrefix, text: CharSequence, start: Int, end: Int): InsertEdit {
+    val prefix = construct.prefix
+    val firstLineStart = lineStartOf(text, start)
+    // Строка конца выделения: конец в начале чужой строки её не захватывает.
+    val lastLineStart = if (end > start && end == lineStartOf(text, end)) {
+        lineStartOf(text, end - 1)
+    } else {
+        lineStartOf(text, end)
+    }
+    val multiline = construct.eachSelectedLine && lastLineStart > firstLineStart
+
+    if (!multiline) {
+        return if (text.startsWith(prefix, firstLineStart)) {
+            // Повтор — переключатель (OQ-2): префикс снимается.
+            val clamp = { position: Int -> maxOf(position - prefix.length, firstLineStart) }
+            InsertEdit(
+                rangeStart = firstLineStart,
+                rangeEnd = firstLineStart + prefix.length,
+                replacement = "",
+                selectionStart = clamp(start),
+                selectionEnd = clamp(end),
+            )
+        } else {
+            InsertEdit(
+                rangeStart = firstLineStart,
+                rangeEnd = firstLineStart,
+                replacement = prefix,
+                selectionStart = start + prefix.length,
+                selectionEnd = end + prefix.length,
+            )
+        }
+    }
+
+    // Маркер на каждую строку выделения — одной заменой диапазона
+    // [начало первой строки, конец выделения).
+    var lineCount = 0
+    val replacement = buildString {
+        var lineStart = true
+        for (index in firstLineStart until end) {
+            if (lineStart) {
+                append(prefix)
+                lineCount++
+            }
+            val char = text[index]
+            append(char)
+            lineStart = char == '\n'
+        }
+    }
+    return InsertEdit(
+        rangeStart = firstLineStart,
+        rangeEnd = end,
+        replacement = replacement,
+        // Выделение остаётся на тех же символах: начало сдвигает один маркер
+        // (первой строки), конец — маркеры всех строк выделения.
+        selectionStart = start + prefix.length,
+        selectionEnd = end + prefix.length * lineCount,
+    )
+}
+
+/**
+ * Заготовка макро-формы `цель[атрибут]` (`FR-8`, решения `OQ-5`).
+ *
+ * Пустое выделение: вставляется форма целиком с русскими заместителями,
+ * заместитель цели выделен — печать заменяет его сразу. Непустое: выделенный
+ * текст встаёт на место цели (`⌶` таблицы заготовок), выделенным остаётся
+ * заместитель атрибута; при пустом заместителе каретка встаёт между скобками.
+ *
+ * Блочная форма — с начала строки: в середине непустой строки перед заготовкой
+ * добавляется перевод строки (правило блочных заготовок аналитики); хвост
+ * строки за вставкой уезжает на свою строку тем же переводом — блочная форма
+ * не терпит текста вплотную за `[]`.
+ */
+private fun macroTemplateEdit(construct: MacroTemplate, text: CharSequence, start: Int, end: Int): InsertEdit {
+    val target = if (start == end) construct.targetPlaceholder else text.substring(start, end)
+    val leading = if (construct.block && start > lineStartOf(text, start)) "\n" else ""
+    val trailing = if (construct.block && end < text.length && text[end] != '\n') "\n" else ""
+
+    val head = leading + construct.prefix
+    val replacement = head + target + "[" + construct.attributePlaceholder + "]" + trailing
+
+    val (selectionStart, selectionEnd) = if (start == end) {
+        val from = start + head.length
+        from to from + construct.targetPlaceholder.length
+    } else {
+        val from = start + head.length + target.length + 1
+        from to from + construct.attributePlaceholder.length
+    }
+    return InsertEdit(
+        rangeStart = start,
+        rangeEnd = end,
+        replacement = replacement,
+        selectionStart = selectionStart,
+        selectionEnd = selectionEnd,
+    )
+}
+
+/** Начало логической строки, на которой стоит [index]: позиция за ближайшим `\n` слева. */
+private fun lineStartOf(text: CharSequence, index: Int): Int {
+    var position = index
+    while (position > 0 && text[position - 1] != '\n') {
+        position--
+    }
+    return position
 }
 
 /**
