@@ -1,5 +1,7 @@
 package io.github.olegnyr.adocmobile.preview
 
+import io.github.olegnyr.adocmobile.theme.AdocTheme
+
 /**
  * Оболочка документа для превью: конвертер отдаёт фрагмент, а показывать надо
  * страницу.
@@ -9,23 +11,11 @@ package io.github.olegnyr.adocmobile.preview
  * ширину и стиль, то есть определяет, как документ выглядит, — а это поведение
  * продукта и обязано быть одинаковым на всех платформах.
  *
- * Стиль здесь намеренно почти пуст. Цвета, гарнитуры из токенов темы, перечень
- * классов конвертера и поведение широких блоков (`FR-20`…`FR-22`, `FR-24`)
- * закрывает `SL-3`; наполнять его в `SL-1` значило бы придумывать требование
- * раньше, чем на него ответил владелец (`OQ-9`, `OQ-10`).
+ * Стиль порождается из ролей палитры ([previewStylesheet], `SL-3`): тёмный фон
+ * до первой отрисовки (`FR-20`), перечень классов конвертера (`FR-21`), цвета и
+ * гарнитуры из токенов (`FR-22`), ширина по экрану (`FR-24`), ноль внешних
+ * ресурсов (`FR-27`).
  */
-
-/**
- * Минимальный стиль скелета.
- *
- * `text-size-adjust` отключает «подкрутку» размера шрифта, которую WebView
- * делает сам: без неё размеры в превью разъезжаются с задуманными, и SL-3
- * пришлось бы подгонять цифры под чужой множитель.
- */
-private val PREVIEW_STYLE = """
-    html { -webkit-text-size-adjust: 100%; }
-    body { margin: 0; padding: 16px; }
-""".trimIndent()
 
 /**
  * Заворачивает фрагмент HTML в страницу.
@@ -35,15 +25,23 @@ private val PREVIEW_STYLE = """
  *
  * `viewport` объявлен без `user-scalable=no`: масштабирование жестом запрещать
  * нельзя (NFR доступности).
+ *
+ * @param stylesheet встроенный стиль страницы. Умолчание — тема из ролей палитры
+ *   *без* встроенных шрифтов: их загрузка suspend ([previewFontFaces]), а эта
+ *   функция чистая. Вызывающий, которому нужны гарнитуры дизайна, собирает стиль
+ *   сам: `previewStylesheet(colors, previewFontFaces())`.
  */
-fun previewDocument(fragment: String): String = buildString(fragment.length + 512) {
+fun previewDocument(
+    fragment: String,
+    stylesheet: String = previewStylesheet(AdocTheme.defaultColors),
+): String = buildString(fragment.length + stylesheet.length + 512) {
     append("<!DOCTYPE html>\n")
     append("<html lang=\"ru\">\n")
     append("<head>\n")
     append("<meta charset=\"utf-8\">\n")
     append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
     append("<style>\n")
-    append(PREVIEW_STYLE)
+    append(stylesheet)
     append("\n</style>\n")
     append("</head>\n")
     append("<body>\n")

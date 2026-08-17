@@ -3,7 +3,9 @@ package io.github.olegnyr.adocmobile.preview
 import android.webkit.WebView
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
+import io.github.olegnyr.adocmobile.theme.AdocTheme
 
 /**
  * Android-реализация шва превью: `AndroidView { WebView }` (`FR-18`).
@@ -19,6 +21,10 @@ import androidx.compose.ui.viewinterop.AndroidView
  */
 @Composable
 actual fun AdocPreview(html: String, modifier: Modifier) {
+    // Фон роли ground у самой вью, а не только в CSS страницы (FR-20, TC-22):
+    // WebView до конца загрузки первой страницы и между загрузками рисует
+    // собственный фон, по умолчанию белый, — это и есть та самая вспышка.
+    val ground = AdocTheme.colors.ground.toArgb()
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -26,6 +32,7 @@ actual fun AdocPreview(html: String, modifier: Modifier) {
                 settings.javaScriptEnabled = false
                 // Рендер офлайн (FR-26): показывать превью незачем ходить в сеть.
                 settings.blockNetworkLoads = true
+                setBackgroundColor(ground)
             }
         },
         update = { view ->
