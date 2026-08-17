@@ -53,7 +53,7 @@ class DocumentStateTest {
     fun TC_4_successfulSaveClearsFlagAndStampsTime() {
         val document = opened()
             .edited("= Заметки\n\nНовый текст.\n")
-            .saved(at = 1_755_000_000_000)
+            .saved(writtenText = "= Заметки\n\nНовый текст.\n", at = 1_755_000_000_000)
 
         assertFalse(document.isModified)
         assertEquals(1_755_000_000_000, document.savedAt)
@@ -77,7 +77,7 @@ class DocumentStateTest {
         val document = opened()
             .edited("правка")
             .saveFailed()
-            .saved(at = 1_755_000_000_777)
+            .saved(writtenText = "правка", at = 1_755_000_000_777)
 
         assertFalse(document.isModified)
         assertEquals(1_755_000_000_777, document.savedAt)

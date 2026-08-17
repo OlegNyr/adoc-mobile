@@ -65,9 +65,19 @@ data class DocumentState(
     fun edited(newText: String): DocumentState =
         copy(text = newText.toEditorText(), lastSaveFailed = false)
 
-    /** Запись удалась: текущий текст стал сохранённым. */
-    fun saved(at: Long): DocumentState =
-        copy(savedText = text, savedAt = at, lastSaveFailed = false)
+    /**
+     * Запись удалась: сохранённым стал *записанный* текст, а не текущий.
+     *
+     * Разница не формальная. Запись асинхронная, и пока она идёт, пользователь
+     * продолжает печатать. Если пометить сохранённым текущий текст, правка,
+     * сделанная во время записи, будет считаться лежащей на диске — и пропадёт
+     * при следующей выгрузке приложения.
+     * Это ровно тот класс отказа, ради которого написана вся фича.
+     *
+     * @param writtenText текст, который действительно ушёл в файл
+     */
+    fun saved(writtenText: String, at: Long): DocumentState =
+        copy(savedText = writtenText, savedAt = at, lastSaveFailed = false)
 
     /**
      * Запись не удалась.
