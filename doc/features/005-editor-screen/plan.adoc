@@ -1,7 +1,7 @@
 = План работ — экран редактора
 :feature: 005-editor-screen
 // plan-status: draft | active | done
-:plan-status: draft
+:plan-status: active
 :updated: 2026-08-17
 :horizon: детально спланирован этап E1; E2 — одной строкой, уточняется после ответов на открытые вопросы
 :toc: macro
@@ -106,7 +106,7 @@ toc::[]
 | «Поделиться» в меню документа: немедленная запись, системный `ACTION_SEND` файла — закрывает «поделился» из критериев шлюза MVP
 | FR-20; TC-20
 | SL-4
-| {st-todo}
+| {st-done}
 |===
 
 Статусы: {st-todo} · {st-wip} · {st-done} (запись — в `progress.adoc`) · {st-hold} · {st-drop}
