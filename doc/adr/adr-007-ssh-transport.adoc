@@ -1,6 +1,6 @@
 = ADR-007: SSH-транспорт — Apache MINA sshd
 // adr-status: proposed | accepted | superseded
-:adr-status: proposed
+:adr-status: accepted
 :date: 2026-08-17
 :feature: 007-git-sync
 :sectanchors:
