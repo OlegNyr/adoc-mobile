@@ -27,12 +27,14 @@ Every one of these produced a build failure during scaffolding, and none matches
 
 ```bash
 ./gradlew :shared:assembleAndroidDeviceTest :androidApp:assembleDebugAndroidTest
-adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
-adb install -r shared/build/outputs/apk/androidTest/shared-androidTest.apk
-adb install -r androidApp/build/outputs/apk/androidTest/debug/androidApp-debug-androidTest.apk
-adb shell am instrument -w io.github.olegnyr.adocmobile.shared.test/androidx.test.runner.AndroidJUnitRunner
-adb shell am instrument -w io.github.olegnyr.adocmobile.test/androidx.test.runner.AndroidJUnitRunner
+adb install -r --user 0 androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb install -r --user 0 shared/build/outputs/apk/androidTest/shared-androidTest.apk
+adb install -r --user 0 androidApp/build/outputs/apk/androidTest/debug/androidApp-debug-androidTest.apk
+adb shell am instrument -w --user 0 io.github.olegnyr.adocmobile.shared.test/androidx.test.runner.AndroidJUnitRunner
+adb shell am instrument -w --user 0 io.github.olegnyr.adocmobile.test/androidx.test.runner.AndroidJUnitRunner
 ```
+
+  **`--user 0` is not optional on this phone.** It carries a second Android user (a work profile, and Samsung Kids appeared as user 150 once): without it `install` lands under one user and `am instrument` looks under another, failing with `ClassNotFoundException` on a class that is demonstrably inside the APK. The symptom reads as "test not compiled" and sends you to hunt a build problem that does not exist (2026-08-19).
 
   Add `-e class <fqcn>` for a single class, `-e log true` to enumerate without running. The owner's folder pick is a scarce resource: burning it on a run that `am instrument` could have done is a real cost, not a formality.
 - **Apache MINA sshd ломает упаковку APK дублями `META-INF`.** Подключение `org.eclipse.jgit.ssh.apache` валит сборку: `2 files found with path 'META-INF/DEPENDENCIES'`. Дублей два и они всплывают по очереди: сперва `META-INF/DEPENDENCIES`, затем `OSGI-INF/l10n/plugin.properties` (его несут и сам JGit, и бандл). Лечится `packaging { resources { excludes += setOf("META-INF/DEPENDENCIES", "META-INF/NOTICE*", "META-INF/LICENSE*", "OSGI-INF/l10n/plugin.properties", …) } }` в модуле приложения — это метаданные Maven, в рантайме бесполезные. Установлено спайком E4 фичи 007; повторится при подключении sshd к любому новому модулю.
