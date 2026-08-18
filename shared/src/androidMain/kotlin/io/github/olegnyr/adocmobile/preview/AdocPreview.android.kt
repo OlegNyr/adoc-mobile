@@ -58,7 +58,7 @@ actual fun AdocPreview(
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
                 setBackgroundColor(ground)
-                webViewClient = PreviewWebViewClient(imageSource, onDocumentLink)
+                webViewClient = PreviewWebViewClient(diagramAwareImageSource(imageSource), onDocumentLink)
             }
         },
         update = { view ->

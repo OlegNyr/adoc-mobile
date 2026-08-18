@@ -70,5 +70,5 @@ internal object AndroidInflate : Inflate {
  * остальные швы.
  */
 fun installDiagramSupport() {
-    DiagramSupport.install(AndroidInflate)
+    DiagramSupport.install(AndroidInflate, HttpDiagramTransport())
 }

@@ -249,4 +249,42 @@ class PreviewPolicyTest {
         val failed = runCatching { PreviewPolicy(debounceMillis = 0) }
         assertTrue(failed.isFailure, "нулевой дебаунс — ошибка конфигурации, а не «рендер на каждый символ»")
     }
+
+    /**
+     * `TC-20` фичи 008: поздние картинки принимаются только на ту страницу, для
+     * которой грузились.
+     *
+     * Второй рубеж после отмены корутины. Отмена снимает подавляющее
+     * большинство случаев, но она — свойство вызывающего; политика обязана
+     * отказать сама, иначе однажды забытая отмена превратится в «превью иногда
+     * показывает старое».
+     */
+    @Test
+    fun TC_20_diagramsOfAnOlderGenerationAreRefused() {
+        val policy = PreviewPolicy()
+        val first = assertIs<PreviewAction.Render>(policy.previewShown("= Первый", now = 0))
+        policy.renderCompleted(first.generation, "<page>первый</page>")
+
+        policy.textEdited(now = 10)
+        val second = assertIs<PreviewAction.Render>(policy.pauseElapsed("= Второй", now = 1000))
+        policy.renderCompleted(second.generation, "<page>второй</page>")
+
+        val late = policy.diagramsResolved(first.generation, "<page>первый с картинками</page>")
+
+        assertIs<PreviewUpdate.Stale>(late, "картинки прошлого поколения приняты")
+        assertEquals("<page>второй</page>", policy.html, "страница подменена прошлым поколением")
+    }
+
+    /** Картинки своего поколения публикуются: ради этого вход и заведён. */
+    @Test
+    fun TC_20_diagramsOfTheShownGenerationArePublished() {
+        val policy = PreviewPolicy()
+        val render = assertIs<PreviewAction.Render>(policy.previewShown("= Документ", now = 0))
+        policy.renderCompleted(render.generation, "<page>с плейсхолдером</page>")
+
+        val update = policy.diagramsResolved(render.generation, "<page>с картинкой</page>")
+
+        assertIs<PreviewUpdate.Publish>(update)
+        assertEquals("<page>с картинкой</page>", policy.html)
+    }
 }

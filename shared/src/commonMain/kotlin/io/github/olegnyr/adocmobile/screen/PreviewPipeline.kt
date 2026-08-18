@@ -3,6 +3,7 @@ package io.github.olegnyr.adocmobile.screen
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.olegnyr.adocmobile.diagram.DiagramResolver
 import io.github.olegnyr.adocmobile.preview.PreviewAction
 import io.github.olegnyr.adocmobile.preview.PreviewFailure
 import io.github.olegnyr.adocmobile.preview.PreviewPolicy
@@ -54,6 +55,7 @@ class PreviewPipeline(
     private val sourceText: () -> String,
     private val policy: PreviewPolicy = PreviewPolicy(),
     private val page: suspend (fragment: String) -> String = { fragment -> previewPage(fragment) },
+    private val diagrams: DiagramResolver = DiagramResolver(),
     private val delayUntil: suspend (dueAt: Long) -> Unit = { dueAt ->
         delay((dueAt - clock()).coerceAtLeast(0))
     },
@@ -81,6 +83,14 @@ class PreviewPipeline(
 
     /** Вкладка превью скрыта (или приложение ушло в фон): движок останавливается. */
     fun previewHidden() {
+        // Корутина отменяется здесь явно, а не только действием политики.
+        // С фичи 008 она переживает публикацию страницы: после первой
+        // публикации политика уже не считает рендер идущим (`inFlight` закрыт),
+        // и на уход с вкладки отвечает `Idle` — а в корутине в этот момент ещё
+        // идёт загрузка диаграмм. Без этой строки скрытое превью продолжало бы
+        // ходить в сеть, и поймать это можно было бы только счётчиком запросов.
+        renderJob?.cancel()
+        renderJob = null
         perform(policy.previewHidden())
     }
 
@@ -141,7 +151,7 @@ class PreviewPipeline(
             // состояния, различать исходы здесь не нужно — их различила
             // политика (FR-15 фичи 003).
             try {
-                policy.renderCompleted(action.generation, page(renderer.render(action.source)))
+                publishWithDiagrams(action)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Throwable) {
@@ -149,6 +159,43 @@ class PreviewPipeline(
             }
             syncState()
         }
+    }
+
+    /**
+     * Публикация в два приёма — решение владельца `OQ-4` фичи 008.
+     *
+     * Сначала страница с плейсхолдерами на местах ещё не приехавших диаграмм:
+     * текст пользователю нужен сразу, а не после сети. Потом загрузка, и только
+     * если что-то приехало — вторая публикация.
+     *
+     * Обе проверки поколения делает политика, и они разные. Первую закрывает
+     * `renderCompleted` («этот рендер всё ещё актуален»), вторую —
+     * `diagramsResolved` («показана всё ещё та страница, для которой грузили»).
+     * Без второй поздние картинки легли бы поверх свежего текста, и выглядело бы
+     * это как «превью иногда показывает старое» — раз в двадцать попыток.
+     *
+     * Отмена (правка текста, уход с превью) отменяет и загрузку: она идёт в этой
+     * же корутине, а `CancelRender` её отменяет. Отдельного сигнала транспорту
+     * не нужно.
+     *
+     * Названная цена: вторая публикация заменяет страницу целиком, хотя
+     * изменились только адреса картинок. `WebView` перерисует её и вернёт
+     * прокрутку (`FR-23` фичи 003), но перезагрузка страницы заметна. Чинить
+     * это в `SL-3` не стали: точечная замена требует скрипта на странице,
+     * которого там нет и быть не должно.
+     */
+    private suspend fun publishWithDiagrams(action: PreviewAction.Render) {
+        // Параметры диаграмм берутся из одного места и уходят и в движок, и в
+        // проход: разъедутся — адреса перестанут узнаваться (см. DiagramResolver).
+        val fragment = renderer.render(action.source, diagrams.options())
+        val first = diagrams.pending(fragment)
+        policy.renderCompleted(action.generation, page(first.html))
+        syncState()
+
+        if (first.missing.isEmpty()) return
+        if (!diagrams.load(first.missing)) return
+
+        policy.diagramsResolved(action.generation, page(diagrams.resolved(fragment).html))
     }
 
     private fun syncState() {

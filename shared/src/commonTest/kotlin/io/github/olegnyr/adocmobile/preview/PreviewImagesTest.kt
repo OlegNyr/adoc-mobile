@@ -2,6 +2,7 @@ package io.github.olegnyr.adocmobile.preview
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertIs
 
 /**
@@ -158,5 +159,37 @@ class PreviewImagesTest {
         // это не запрос локального файла.
         assertDenied("${PREVIEW_BASE_URL}pic.png?width=100")
         assertDenied("${PREVIEW_BASE_URL}pic.png#top")
+    }
+
+    /**
+     * `TC-6` фичи 008: диаграммы и картинки документа разводятся по префиксу.
+     *
+     * Порядок проверки — часть требования, а не деталь: файл `diagram/….svg`,
+     * лежащий рядом с документом, не должен подменять собой отрисованную
+     * диаграмму.
+     */
+    @Test
+    fun TC_6_diagramImagesComeBeforeDocumentFiles() {
+        val fromDocument = PreviewImageSource { path -> "документ:$path".encodeToByteArray() }
+        val source = diagramAwareImageSource(fromDocument) { path -> "диаграмма:$path".encodeToByteArray() }
+
+        assertEquals(
+            "диаграмма:diagram/abc.svg",
+            source.read("diagram/abc.svg")?.decodeToString(),
+            "запрос диаграммы ушёл в каталог документа",
+        )
+        assertEquals(
+            "документ:pic.png",
+            source.read("pic.png")?.decodeToString(),
+            "обычная картинка документа перестала читаться",
+        )
+    }
+
+    @Test
+    fun TC_6_missingDocumentSourceStillServesDiagrams() {
+        val source = diagramAwareImageSource(documentImages = null) { _ -> byteArrayOf(7) }
+
+        assertEquals(7, source.read("diagram/abc.svg")?.single())
+        assertNull(source.read("pic.png"), "без источника документа картинка не берётся ниоткуда")
     }
 }

@@ -215,6 +215,18 @@ fun previewStylesheet(
           max-width: 100%;
           height: auto;
         }
+        .kroki-pending {
+          position: relative;
+          border: 1px solid $borderObject;
+          min-height: 120px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-image:
+            repeating-linear-gradient(0deg, $raised 0 19px, $borderList 19px 20px),
+            repeating-linear-gradient(90deg, transparent 0 19px, $borderList 19px 20px);
+        }
+        .kroki-pending .kroki-note { padding: 0; }
         .kroki-unavailable {
           border: 1px solid $borderObject;
           background-color: $raised;

@@ -611,7 +611,7 @@ And   внешнего адреса в странице нет
 ----
 
 TC-7 (happy, automatable) — покрывает FR-8::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramPassTest.kt, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/screen/PreviewPipelineDiagramsTest.kt
 [source,gherkin]
 ----
 Given тот же HTML и пустой кэш
@@ -660,7 +660,7 @@ Then  всё, кроме блока диаграммы, совпадает с и
 ----
 
 TC-12 (edge, automatable) — покрывает FR-11::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramPassTest.kt
 [source,gherkin]
 ----
 Given документ, где одна и та же диаграмма встречается дважды
@@ -780,7 +780,7 @@ And   телом запроса является исходный текст д�
 ----
 
 TC-20 (edge, automatable) — покрывает FR-9, UC-4::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/screen/PreviewPipelineDiagramsTest.kt, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/preview/PreviewPolicyTest.kt
 [source,gherkin]
 ----
 Given превью показывает страницу с плейсхолдером
@@ -790,7 +790,7 @@ And   поколение публикации совпадает с текущи
 ----
 
 TC-21 (жизненный цикл, automatable) — покрывает NFR-5::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/screen/PreviewPipelineDiagramsTest.kt
 [source,gherkin]
 ----
 Given идут две загрузки диаграмм
@@ -902,7 +902,7 @@ Then  пометка читается текстом, а не только цв�
 ----
 
 TC-32 (отзывчивость, automatable) — покрывает NFR-1::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramPassTest.kt
 [source,gherkin]
 ----
 Given HTML предельного документа (~1000 строк) с десятью диаграммами
@@ -977,11 +977,11 @@ xref:../../adr/adr-014-zlib-inflate.adoc[ADR-014] — распаковка zlib 
 | FR-4 | UC-1 | TC-1, TC-35 | SL-1 | {st-done}
 | FR-5 | UC-5 | TC-28 | SL-6 | {st-todo}
 | FR-6 | UC-1 | TC-3 | SL-1 | {st-done}
-| FR-7 | UC-1 | TC-6 | SL-2, SL-3 | частично: подстановка адреса закрыта
-| FR-8 | UC-1 | TC-7 | SL-3 | {st-todo}
-| FR-9 | UC-1, UC-4 | TC-20 | SL-3 | {st-todo}
+| FR-7 | UC-1 | TC-6, TC-43 | SL-2, SL-3 | {st-done}
+| FR-8 | UC-1 | TC-7 | SL-3 | {st-done}
+| FR-9 | UC-1, UC-4 | TC-20 | SL-3 | {st-done}
 | FR-10 | UC-4 | TC-17, TC-18 | SL-4 | {st-todo}
-| FR-11 | UC-4 | TC-12 | SL-3 | {st-todo}
+| FR-11 | UC-4 | TC-12 | SL-3 | {st-done}
 | FR-12 | UC-1 | TC-19 | SL-11 | {st-todo}
 | FR-13 | UC-1 | TC-11, TC-39 | SL-2 | {st-done}
 | FR-14 | UC-1 | TC-13 | SL-5 | {st-todo}
@@ -1000,11 +1000,11 @@ xref:../../adr/adr-014-zlib-inflate.adoc[ADR-014] — распаковка zlib 
 | FR-27 | UC-6, UC-7 | TC-27 | SL-9 | {st-todo}
 | FR-28 | UC-5 | TC-31 | SL-7 | {st-todo}
 | FR-29 | — | — | — | не делается
-| NFR-1 | — | TC-32 | SL-3 | {st-todo}
+| NFR-1 | — | TC-32 | SL-3 | частично: проход измерен, бюджет пайплайна целиком — за `SL-4`
 | NFR-2 | — | TC-33 | SL-2 | {st-done}
 | NFR-3 | UC-3, UC-7 | TC-27 | SL-9 | {st-todo}
-| NFR-4 | — | TC-33 | SL-3 | {st-todo}
-| NFR-5 | UC-4 | TC-21 | SL-4 | {st-todo}
+| NFR-4 | — | TC-33 | SL-3 | {st-done}
+| NFR-5 | UC-4 | TC-21 | SL-3, SL-4 | частично: отмена загрузки закрыта
 | NFR-6 | UC-8 | TC-15 | SL-5 | {st-todo}
 | NFR-7 | UC-5 | TC-23 | SL-7 | к редактору неприменимо
 | NFR-8 | UC-3 | TC-29, TC-30, TC-35 | SL-1, SL-4 | частично: TC-35 закрыт

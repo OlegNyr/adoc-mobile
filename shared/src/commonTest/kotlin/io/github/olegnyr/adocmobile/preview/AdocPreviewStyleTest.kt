@@ -37,10 +37,20 @@ class AdocPreviewStyleTest {
         }
         // Пометка набрана моноширинной гарнитурой служебных меток дизайна, как
         // и прочие метки превью, а не выделена одним лишь цветом.
-        val note = stylesheet.substringAfter(".kroki-note {").substringBefore("}")
+        // Правило ищется по точному селектору, а не подстрокой: «.kroki-note {»
+        // входит и в «.kroki-pending .kroki-note {», и подстрочный поиск нашёл
+        // бы уточняющее правило вместо основного.
+        val note = ruleBody(".kroki-note")
         assertTrue("font-family" in note, "пометка не задаёт гарнитуру: $note")
         assertTrue("letter-spacing" in note, "пометка не задаёт трекинг служебной метки: $note")
     }
+
+    /** Тело правила с точно таким селектором; пустая строка — правила нет. */
+    private fun ruleBody(selector: String): String =
+        stylesheet.split('}')
+            .firstOrNull { it.substringBefore('{').trim() == selector }
+            ?.substringAfter('{')
+            .orEmpty()
 
     // ---- TC-18: перечень классов из FR-21, снятый прогоном конвертера ----
 

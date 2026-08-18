@@ -44,9 +44,25 @@ object DiagramSupport {
     var inflate: Inflate? = null
         private set
 
+    @Volatile
+    var transport: DiagramTransport? = null
+        private set
+
+    /**
+     * Изображения, загруженные в этом запуске.
+     *
+     * Живёт здесь, а не у экрана, по той же причине, что и остальное: страницу
+     * собирает общий код, а байты спрашивает платформенный перехват, и между
+     * ними нет общего владельца. Офлайн-кэш файлами придёт в `SL-5` и заменит
+     * это хранилище собой; тогда же стоит пересмотреть, нужен ли процессный
+     * слой поверх него.
+     */
+    val images: DiagramImageStore = DiagramImageStore()
+
     /** Вызывается один раз при старте приложения. */
-    fun install(inflate: Inflate) {
+    fun install(inflate: Inflate, transport: DiagramTransport? = null) {
         this.inflate = inflate
+        if (transport != null) this.transport = transport
     }
 }
 

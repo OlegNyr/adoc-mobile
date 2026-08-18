@@ -10,6 +10,15 @@ package io.github.olegnyr.adocmobile.diagram
  */
 const val DIAGRAM_UNAVAILABLE_NOTE: String = "ДИАГРАММА НЕ ЗАГРУЖЕНА"
 
+/**
+ * Подпись плейсхолдера, пока диаграмма грузится, — `FR-8` и макет 02a.
+ *
+ * Форма из дизайна: источник, тип диаграммы и состояние моноширинной строкой
+ * прописными. Слово «СБОРКА» — про сборку диаграммы на сервере, а не про сборку
+ * приложения; в макете стоит именно оно.
+ */
+const val DIAGRAM_PENDING_SOURCE: String = "KROKI"
+
 /** Что показать на месте блока диаграммы. */
 sealed interface DiagramOutcome {
 
@@ -28,6 +37,16 @@ sealed interface DiagramOutcome {
      * пустой блок кода — это враньё об исходнике, а не его показ (`FR-22`).
      */
     data class Unavailable(val source: String?) : DiagramOutcome
+
+    /**
+     * Изображения ещё нет, но оно едет: на месте диаграммы стоит плейсхолдер.
+     *
+     * Отдельный исход, а не «недоступна с пустым текстом»: пользователь должен
+     * различать «сейчас появится» и «не появится». Решение владельца по `OQ-4`
+     * — публиковать страницу сразу с плейсхолдерами и дорисовывать картинки по
+     * мере загрузки; без этого исхода публиковать было бы нечего.
+     */
+    data object Loading : DiagramOutcome
 }
 
 /**
@@ -103,6 +122,20 @@ private fun replacementFor(tag: String, address: KrokiAddress, outcome: DiagramO
         // разметку в странице превью.
         is DiagramOutcome.Image ->
             tag.replace("src=\"${address.url}\"", "src=\"${escapeHtml(outcome.src)}\"")
+
+        // Плейсхолдер — «чертёжный» блок макета 02a: рамка в клетку с меткой.
+        // Разметка минимальная, вся картинка задаётся стилем: скриптов на
+        // странице нет, и ничего динамического в плейсхолдере быть не может.
+        DiagramOutcome.Loading -> buildString {
+            append("<div class=\"kroki-pending\">")
+            append("<div class=\"kroki-note\">")
+            append(DIAGRAM_PENDING_SOURCE)
+            append(" · ")
+            append(address.type.uppercase())
+            append(" · СБОРКА…")
+            append("</div>")
+            append("</div>")
+        }
 
         is DiagramOutcome.Unavailable -> buildString {
             append("<div class=\"kroki-unavailable\">")

@@ -163,6 +163,16 @@ class PreviewPolicy(private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS) 
     private var dueAt: Long? = null
 
     /** Поколение незавершённого рендера; `null` — рендера в полёте нет. */
+    /**
+     * Поколение страницы, которая сейчас показана.
+     *
+     * Нужно фиче диаграмм (`FR-9` фичи 008): картинки приезжают *после*
+     * публикации, и поздний ответ обязан попасть именно на ту страницу, для
+     * которой грузился. `inFlight` для этого не годится — к моменту прихода
+     * картинок он уже пуст.
+     */
+    private var publishedGeneration: Int? = null
+
     private var inFlight: Int? = null
 
     /** Исходник незавершённого рендера — станет [publishedSource] при публикации. */
@@ -265,8 +275,37 @@ class PreviewPolicy(private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS) 
         inFlight = null
         publishedSource = inFlightSource
         inFlightSource = null
+        publishedGeneration = generation
         html = renderedHtml
         failure = null
+        return PreviewUpdate.Publish(renderedHtml)
+    }
+
+    /**
+     * Картинки диаграмм поколения [generation] доехали: перерисовать уже
+     * опубликованную страницу (`FR-9` фичи 008, решение владельца `OQ-4`).
+     *
+     * Отдельный вход, а не повторный [renderCompleted]: тот закрывает поколение
+     * и второй раз ответит `Stale`. Здесь проверяется другое условие — что
+     * показана всё ещё *эта* страница.
+     *
+     * Три случая отказа, и каждый ломался бы тихо:
+     *
+     * * показана страница другого поколения — пользователь успел изменить
+     *   текст, и класть на свежую страницу картинки от старой значит показать
+     *   ему прошлое;
+     * * показана плашка отказа — картинки не имеют права её снимать: рендер
+     *   отказал, и это важнее диаграмм;
+     * * ничего не показано — публиковать поверх пустоты нечего.
+     *
+     * Более новый рендер, идущий прямо сейчас, публикации не мешает: показана
+     * пока всё равно эта страница, и обновить на ней картинки лучше, чем
+     * оставить плейсхолдеры до конца нового рендера.
+     */
+    fun diagramsResolved(generation: Int, renderedHtml: String): PreviewUpdate {
+        if (generation != publishedGeneration) return PreviewUpdate.Stale
+        if (failure != null || html == null) return PreviewUpdate.Stale
+        html = renderedHtml
         return PreviewUpdate.Publish(renderedHtml)
     }
 

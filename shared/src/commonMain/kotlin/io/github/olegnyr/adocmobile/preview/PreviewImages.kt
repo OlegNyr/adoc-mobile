@@ -1,5 +1,8 @@
 package io.github.olegnyr.adocmobile.preview
 
+import io.github.olegnyr.adocmobile.diagram.DIAGRAM_PATH_PREFIX
+import io.github.olegnyr.adocmobile.diagram.DiagramSupport
+
 /**
  * Локальные изображения документа в превью — решение `OQ-9` (`SL-6`).
  *
@@ -140,3 +143,30 @@ private val IMAGE_MIME_BY_EXTENSION: Map<String, String> = mapOf(
     "bmp" to "image/bmp",
     "avif" to "image/avif",
 )
+
+/**
+ * Источник картинок превью, знающий про диаграммы (`FR-7`, `ADR-009`).
+ *
+ * Изображения диаграмм и картинки рядом с документом приходят одним и тем же
+ * запросом от `WebView`, но лежат в разных местах: первые — в хранилище фичи
+ * диаграмм, вторые — в каталоге документа. Разводит их префикс пути, а не
+ * догадка по расширению.
+ *
+ * Композиция живёт здесь, а не у экрана, сознательно: экран не должен знать о
+ * существовании диаграмм, чтобы подключить превью, — иначе каждая новая
+ * разновидность картинки означала бы правку навигации.
+ *
+ * Порядок проверки важен: сначала диаграммы. Каталог документа — территория
+ * пользователя, и файл `diagram/….svg`, случайно лежащий рядом с документом,
+ * не должен подменять собой отрисованную диаграмму.
+ */
+fun diagramAwareImageSource(
+    documentImages: PreviewImageSource?,
+    diagramImages: (String) -> ByteArray? = { path -> DiagramSupport.images.read(path)?.bytes },
+): PreviewImageSource = PreviewImageSource { relativePath ->
+    if (relativePath.startsWith(DIAGRAM_PATH_PREFIX)) {
+        diagramImages(relativePath)
+    } else {
+        documentImages?.read(relativePath)
+    }
+}
