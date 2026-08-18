@@ -91,6 +91,18 @@ fun SshKeyScreen(
                         onGenerate = { model.generateRequested(deviceName) },
                     )
 
+                    // Ключ есть, но не читается: текст говорит именно это, а
+                    // создание нового идёт через подтверждение замены. Первым
+                    // предлагается повтор чтения — отказ мог быть временным,
+                    // и уничтожение целой пары не должно быть единственным
+                    // выходом (второй раунд ревью `SL-19`).
+                    is SshKeyScreenState.Unreadable -> NoKeyBlock(
+                        title = "КЛЮЧ НЕ ЧИТАЕТСЯ",
+                        failure = state.failure,
+                        onGenerate = { model.generateRequested(deviceName) },
+                        onRetry = model::retryRequested,
+                    )
+
                     is SshKeyScreenState.Ready -> KeyBlock(
                         key = state.key,
                         notice = state.notice,
@@ -99,12 +111,18 @@ fun SshKeyScreen(
                         onDelete = model::deleteRequested,
                     )
 
-                    is SshKeyScreenState.ConfirmingReplace -> KeyBlock(
-                        key = state.key,
-                        notice = null,
-                        onCopy = { model.copyRequested(onCopy) },
-                        onReplace = {},
-                        onDelete = {},
+                    is SshKeyScreenState.ConfirmingReplace -> state.key?.let { key ->
+                        KeyBlock(
+                            key = key,
+                            notice = null,
+                            onCopy = { model.copyRequested(onCopy) },
+                            onReplace = {},
+                            onDelete = {},
+                        )
+                    } ?: NoKeyBlock(
+                        title = "КЛЮЧ НЕ ЧИТАЕТСЯ",
+                        failure = null,
+                        onGenerate = {},
                     )
 
                     is SshKeyScreenState.ConfirmingDelete -> KeyBlock(
@@ -121,9 +139,17 @@ fun SshKeyScreen(
 
     when (state) {
         is SshKeyScreenState.ConfirmingReplace -> Confirmation(
-            label = "ЗАМЕНИТЬ КЛЮЧ",
-            message = "Прежний ключ перестанет подходить серверу. Новый нужно будет прописать в настройках " +
-                "репозитория заново — до этого синхронизация по SSH работать не будет.",
+            label = if (state.key == null) "СОЗДАТЬ КЛЮЧ ЗАНОВО" else "ЗАМЕНИТЬ КЛЮЧ",
+            // Два случая — «меняем рабочий ключ» и «прежний уже не прочитать» —
+            // и текст у них разный: во втором показывать нечего, но и молча
+            // затирать нельзя.
+            message = if (state.key == null) {
+                "Прежний ключ на устройстве есть, но прочитать его не удалось — подписать им уже нельзя. " +
+                    "Новый ключ придётся прописать в настройках репозитория заново."
+            } else {
+                "Прежний ключ перестанет подходить серверу. Новый нужно будет прописать в настройках " +
+                    "репозитория заново — до этого синхронизация по SSH работать не будет."
+            },
             confirmLabel = "ЗАМЕНИТЬ",
             onConfirm = model::replaceConfirmed,
             onDismiss = model::replaceDismissed,
@@ -173,12 +199,17 @@ private fun SshKeyAppBar(onBack: () -> Unit) {
     }
 }
 
-/** Состояние «ключа нет»: объяснение и кнопка создания. */
+/** Состояние «ключа нет» и «ключ не читается»: объяснение и кнопки. */
 @Composable
-private fun NoKeyBlock(failure: String?, onGenerate: () -> Unit) {
+private fun NoKeyBlock(
+    failure: String?,
+    onGenerate: () -> Unit,
+    title: String = "КЛЮЧА НЕТ",
+    onRetry: (() -> Unit)? = null,
+) {
     AdocBlueprintBlock(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "КЛЮЧА НЕТ",
+            text = title,
             style = adocTextStyle(AdocTypography.sectionLabel),
             color = AdocTheme.colors.textFaint,
         )
@@ -196,6 +227,10 @@ private fun NoKeyBlock(failure: String?, onGenerate: () -> Unit) {
                 color = AdocTheme.colors.textSecondary,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
+        }
+        if (onRetry != null) {
+            PrimaryButton(label = "ПРОЧИТАТЬ ЗАНОВО", onClick = onRetry)
+            Box(modifier = Modifier.height(10.dp))
         }
         PrimaryButton(label = "СОЗДАТЬ КЛЮЧ", onClick = onGenerate)
     }

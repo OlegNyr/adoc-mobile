@@ -22,10 +22,10 @@ private const val KEY_TYPE = "ssh-ed25519"
  * `ssh-ed25519 AAAA… комментарий`.
  *
  * Комментарий — обычно имя устройства: владелец увидит его в списке ключей
- * сервера и поймёт, какой телефон он добавлял. Пробелы и переводы строк в
- * нём заменяются дефисом: формат `authorized_keys` строчный и разделяется
- * пробелами, а имя устройства приходит от системы и может содержать что
- * угодно. Пустой комментарий просто опускается.
+ * сервера и поймёт, какой телефон он добавлял. Санитайзер — [sanitizeKeyComment]:
+ * формат `authorized_keys` строчный и разделяется пробелами, а имя устройства
+ * приходит от системы и может содержать что угодно. Пустой комментарий просто
+ * опускается.
  *
  * @param rawPublicKey 32 байта публичной части ed25519
  */
@@ -36,9 +36,53 @@ fun openSshPublicKeyLine(rawPublicKey: ByteArray, comment: String): String {
     }.toByteArray()
 
     val encoded = base64(body)
-    val cleanComment = comment.trim().replace(WHITESPACE, "-")
+    val cleanComment = sanitizeKeyComment(comment)
     return if (cleanComment.isEmpty()) "$KEY_TYPE $encoded" else "$KEY_TYPE $encoded $cleanComment"
 }
+
+/**
+ * Комментарий ключа, пригодный для строки `authorized_keys` (`TC-57`).
+ *
+ * Правило белого списка, а не чёрного: сохраняются буквы и цифры *любого*
+ * алфавита плюс `- _ . @`, всё прочее становится дефисом, повторы дефисов
+ * схлопываются, длина ограничена [MAX_COMMENT_LENGTH].
+ *
+ * Почему не регулярное выражение: ASCII-класс `\s` пропускал бы неразрывный
+ * пробел, разделители строк и абзацев, управляющие символы и метки
+ * направления письма — они прошли бы дословно в строку, которую человек
+ * вставляет в веб-форму сервера (находка security-ревью E4). Флаг `(?U)`,
+ * который сделал бы класс юникодным, на Android падает (`CLAUDE.md`), так
+ * что класс задан явно — проверкой категории символа, без регулярок вовсе.
+ */
+internal fun sanitizeKeyComment(comment: String): String {
+    val mapped = StringBuilder(comment.length)
+    comment.forEach { char ->
+        // Невидимые «буквы» (hangul filler и родня) по категории проходят как
+        // буквы, а рисуются пустотой: два ключа выглядели бы в списке сервера
+        // одинаково (находка security-ревью `SL-20`).
+        val keep = (char.isLetterOrDigit() && char !in INVISIBLE_LETTERS) || char in KEPT_PUNCTUATION
+        if (keep) {
+            mapped.append(char)
+        } else if (mapped.isNotEmpty() && mapped.last() != SEPARATOR) {
+            mapped.append(SEPARATOR)
+        }
+    }
+    return mapped.toString().take(MAX_COMMENT_LENGTH).trim(SEPARATOR)
+}
+
+/** Длина комментария: имя устройства, а не поле для рассказа. */
+private const val MAX_COMMENT_LENGTH = 64
+
+private const val SEPARATOR = '-'
+
+private const val KEPT_PUNCTUATION = "-_.@"
+
+/**
+ * «Буквы», которых не видно: hangul-заполнители и их родня.
+ * Категория у них буквенная, ширина — пустая, и в списке ключей сервера два
+ * разных ключа выглядели бы одинаково подписанными.
+ */
+private const val INVISIBLE_LETTERS = "\u115F\u1160\u3164\uFFA0"
 
 /**
  * Отпечаток в формате `ssh-keygen -l`: `SHA256:` плюс base64 хэша
@@ -65,9 +109,34 @@ private fun lengthPrefixed(data: ByteArray): List<Byte> = buildList {
     addAll(data.toList())
 }
 
-private val WHITESPACE = Regex("\\s+")
-
 private const val BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+/**
+ * Разбор base64 из строки ключа; `null` — строка не base64.
+ *
+ * Нужен там, где по показанной строке надо собрать сам ключ: транспорт
+ * поднимает публичную часть пары, а отпечаток считается от тех же байт.
+ * Живёт рядом с кодировщиком и в `commonMain` по той же причине — на iOS
+ * иначе пришлось бы писать заново (`NFR-2`).
+ */
+internal fun decodeSshBase64(text: String): ByteArray? {
+    if (text.isEmpty()) return null
+    val clean = text.trimEnd('=')
+    var buffer = 0
+    var bits = 0
+    val out = ArrayList<Byte>(clean.length * 3 / 4 + 1)
+    for (char in clean) {
+        val index = BASE64_ALPHABET.indexOf(char)
+        if (index < 0) return null
+        buffer = (buffer shl 6) or index
+        bits += 6
+        if (bits >= 8) {
+            bits -= 8
+            out += ((buffer shr bits) and 0xFF).toByte()
+        }
+    }
+    return out.toByteArray()
+}
 
 /**
  * Base64 своей реализацией: `java.util.Base64` в `commonMain` недоступен, а
@@ -111,8 +180,14 @@ private fun base64(data: ByteArray): String {
  *
  * `commonMain` не имеет хэшей в стандартной библиотеке, а отпечаток обязан
  * считаться одинаково на обеих платформах и проверяться без устройства.
- * Реализация используется только для *публичного* ключа: секретов она не
- * касается, поэтому криптостойкость реализации здесь не вопрос безопасности.
+ *
+ * Секретов реализация не касается, но безразличной к безопасности она *не
+ * является*: на отпечатке держится решение человека доверять ключу сервера
+ * (`FR-29`), и ошибка расчёта означала бы сверку не того значения. Поэтому
+ * она сверена эталонными векторами FIPS 180-4, включая границы блоков
+ * набивки — 55, 56, 63, 64, 119 и 120 байт (`TC-50`). Прежняя формулировка
+ * этого KDoc («криптостойкость здесь не вопрос безопасности») была верна до
+ * E4 и исправлена вместе с расширением набора векторов.
  */
 internal fun sha256(message: ByteArray): ByteArray {
     val k = intArrayOf(

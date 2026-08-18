@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Правила выгрузки данных для Android 12+ (фича 007, TC-58).
+
+  Приватный каталог Git-слоя не уезжает ни в облачную копию, ни в перенос на
+  новое устройство: в нём лежат known_hosts с отпечатками серверов, которым
+  доверие подтвердил человек на *этом* устройстве (FR-29), публичная строка
+  SSH-ключа и шифртекст секретов. Сам шифртекст без ключа Android Keystore
+  бесполезен — Keystore не переносится, — но список доверенных серверов
+  переехал бы читаемым, и на новом устройстве вопрос о доверии уже не
+  задался бы.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="git/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="git/" />
+    </device-transfer>
+</data-extraction-rules>

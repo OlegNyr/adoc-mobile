@@ -1,7 +1,5 @@
 package io.github.olegnyr.adocmobile.git
 
-import android.os.Build
-import java.io.File
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -13,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Генерация и хранение SSH-ключа на Android (`FR-27`, `SL-16`).
+ * Генерация и хранение SSH-ключа на Android (`FR-27`, `SL-16`, `SL-19`).
  *
  * Ключ ed25519 создаётся обычным провайдером JCA, приватная часть уходит в
  * хранилище секретов фичи (файл + AES-GCM-ключ из Keystore) — решение
@@ -21,45 +19,63 @@ import kotlinx.coroutines.withContext
  * Keystore подписывает ed25519 только в DER и только с `DIGEST_NONE`, а SSH
  * нужны сырые 64 байта, и на `minSdk 26` опереться на Keystore нельзя.
  *
- * Приватный ключ не попадает ни в логи, ни в возвращаемые типы: наружу
- * выходит только [SshKeyInfo] с публичной частью. Публичная часть хранится
- * рядом отдельной записью — чтобы показать её на экране, не расшифровывая
- * приватную.
+ * *Обе половины пары лежат в одном слоте и пишутся одной записью* (`TC-56`,
+ * слайс `SL-19`): публичная строка — открытой частью слота, приватная —
+ * шифртекстом. Прежняя схема писала их в два места по очереди, и отказ на
+ * втором шаге оставлял новую приватную часть со старой публичной строкой:
+ * сервер получал один ключ, подпись шла другим, и отказ аутентификации ничем
+ * не объяснялся. Порядок шагов такую пару не спасает — спасает одна запись.
  *
- * @param secrets хранилище секретов; ключ лежит в нём под своим именем хоста
- * @param publicKeyFile файл публичной части в приватном каталоге приложения
+ * Приватный ключ не попадает ни в логи, ни в возвращаемые типы: наружу
+ * выходит только [SshKeyInfo] с публичной частью. Показ ключа приватную часть
+ * не расшифровывает вовсе — открытая часть слота читается без ключа Keystore;
+ * там, где расшифровка нужна (сборка пары для транспорта), массив затирается
+ * сразу после использования.
+ *
+ * `android.*`-API здесь нет намеренно: платформенное в классе — только
+ * хранилище секретов, поэтому логика проверяется host-тестами без устройства
+ * (`SshKeyStoreHostTest`), а устройство закрывает Keystore и криптопровайдер
+ * (`TC-52`).
+ *
+ * @param secrets хранилище секретов; ключ лежит в нём слотом [SSH_KEY_SLOT]
  */
 class AndroidSshKeyStore(
     private val secrets: GitSecretStore,
-    private val publicKeyFile: File,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { System.currentTimeMillis() },
-    private val deviceName: () -> String = { "${Build.MANUFACTURER} ${Build.MODEL}".trim() },
-) : SshKeyStore {
+) : SshKeyStore, SshKeyPairs {
 
-    /** Ключ устройства или `null`, если он не создавался. */
-    override suspend fun currentKey(): SshKeyInfo? = withContext(io) {
-        if (!publicKeyFile.isFile) return@withContext null
-        // Ключ считается существующим, только когда на месте обе половины:
-        // публичная строка без приватной части бесполезна и вводила бы
-        // пользователя в заблуждение («ключ есть», а подписать нечем).
-        if (secrets.tokenFor(PRIVATE_KEY_SLOT) == null) return@withContext null
-        val line = publicKeyFile.readText().trim()
-        if (line.isEmpty()) return@withContext null
-        SshKeyInfo(
-            publicKeyLine = line,
-            fingerprint = fingerprintOf(line),
-            createdAtEpochMs = publicKeyFile.lastModified(),
-        )
+    /** Состояние ключа устройства — без расшифровки приватной части. */
+    override suspend fun currentKey(): SshKeyPresence = withContext(io) {
+        secrets.stamp(SSH_KEY_SLOT) ?: return@withContext SshKeyPresence.None
+        val stored = secrets.readPlain(SSH_KEY_SLOT)?.let(::parsePublicPart)
+            ?: return@withContext SshKeyPresence.Unreadable
+        SshKeyPresence.Present(stored)
+    }
+
+    /**
+     * Ключ с проверенной целостностью (`FR-27`).
+     *
+     * Открытая часть слота тегом GCM заверена, но её показ тег не проверяет —
+     * для этого нужна расшифровка. Здесь она и делается: секретная часть
+     * поднимается, тег проверяется вместе с открытой, массив затирается.
+     * Строка, которую человек вставит в настройки сервера, обязана пройти
+     * этот путь — подменённая иначе доехала бы до буфера обмена.
+     */
+    override suspend fun verifiedKey(): SshKeyInfo? = withContext(io) {
+        // Одно чтение на обе половины: раздельные дали бы окно, в котором
+        // подменённая открытая часть уезжает наружу «проверенной» — тег
+        // сошёлся бы над другим содержимым файла (второй раунд ревью).
+        val (plain, secret) = secrets.readVerified(SSH_KEY_SLOT) ?: return@withContext null
+        secret.fill(0)
+        parsePublicPart(plain)
     }
 
     /**
      * Создать ключ ed25519, заменив прежний (`FR-27`).
      *
-     * Порядок важен: сначала приватная часть в хранилище, затем публичная на
-     * диск. Обрыв между шагами оставляет состояние «приватный есть, публичной
-     * нет», которое [currentKey] честно читает как «ключа нет» — лучше, чем
-     * обратное, где экран показывал бы ключ, которым нечего подписать.
+     * Одна запись на обе половины: отказ оставляет прежний ключ целым, а не
+     * пару из разных ключей.
      */
     override suspend fun generateKey(comment: String): SshKeyInfo = withContext(io) {
         val generator = KeyPairGenerator.getInstance(ALGORITHM)
@@ -68,28 +84,35 @@ class AndroidSshKeyStore(
             generateKeyPair()
         }
 
-        // Приватная часть — в PKCS#8, как её отдаёт провайдер: расшифровывать
-        // и разбирать её здесь незачем, транспорту она уходит целиком.
-        val privateKey = Secret(pair.private.encoded.encodeBase64())
-        secrets.storeToken(PRIVATE_KEY_SLOT, privateKey)
-
         val line = openSshPublicKeyLine(rawEd25519PublicKey(pair.public.encoded), comment)
-        publicKeyFile.parentFile?.mkdirs()
-        publicKeyFile.writeText(line)
+        val createdAt = clock()
+        // Приватная часть — в PKCS#8, как её отдаёт провайдер: разбирать её
+        // здесь незачем, транспорту она уходит целиком.
+        val privateKey = pair.private.encoded
+        try {
+            secrets.store(
+                slot = SSH_KEY_SLOT,
+                secret = privateKey,
+                plain = publicPart(line, createdAt),
+            )
+        } finally {
+            privateKey.fill(0)
+        }
 
-        SshKeyInfo(
-            publicKeyLine = line,
-            fingerprint = fingerprintOf(line),
-            createdAtEpochMs = clock(),
-        )
+        SshKeyInfo(publicKeyLine = line, fingerprint = fingerprintOf(line), createdAtEpochMs = createdAt)
     }
 
-    /** Забыть ключ целиком: обе половины (`FR-28`). */
+    /** Забыть ключ целиком: обе половины (`FR-28`). Токен при этом цел (`TC-55`). */
     override suspend fun deleteKey() = withContext(io) {
-        publicKeyFile.delete()
-        secrets.clearToken()
-        Unit
+        secrets.clear(SSH_KEY_SLOT)
     }
+
+    /**
+     * Метка текущего ключа для транспорта: меняется при каждой записи и
+     * исчезает с удалением. Позволяет держать фабрику сессий, не поднимая
+     * приватную часть в память на каждую операцию.
+     */
+    override suspend fun keyStamp(): String? = withContext(io) { secrets.stamp(SSH_KEY_SLOT) }
 
     /**
      * Пара ключей для транспорта; `null` — ключа нет или он не читается.
@@ -102,27 +125,43 @@ class AndroidSshKeyStore(
      * фиксированного заголовка `SubjectPublicKeyInfo` для ed25519: он
      * неизменен, и разбирать ASN.1 ради него незачем.
      */
-    internal suspend fun keyPair(): KeyPair? = withContext(io) {
-        val stored = secrets.tokenFor(PRIVATE_KEY_SLOT)?.value ?: return@withContext null
-        if (!publicKeyFile.isFile) return@withContext null
+    override suspend fun keyPair(): KeyPair? = withContext(io) {
+        // Тем же одним чтением: публичная половина пары обязана происходить из
+        // того же содержимого файла, что и приватная.
+        val (plain, stored) = secrets.readVerified(SSH_KEY_SLOT) ?: return@withContext null
+        val line = parsePublicPart(plain)?.publicKeyLine ?: return@withContext null
         try {
             val factory = KeyFactory.getInstance(ALGORITHM)
-            val privateKey = factory.generatePrivate(PKCS8EncodedKeySpec(stored.decodeBase64()))
+            val privateKey = factory.generatePrivate(PKCS8EncodedKeySpec(stored))
 
-            val line = publicKeyFile.readText().trim()
-            val body = line.split(" ").getOrNull(1)?.decodeBase64() ?: return@withContext null
+            val body = decodeSshBase64(line.split(" ").getOrNull(1).orEmpty()) ?: return@withContext null
             val raw = body.copyOfRange(body.size - ED25519_RAW_SIZE, body.size)
             val publicKey = factory.generatePublic(X509EncodedKeySpec(ED25519_SPKI_PREFIX + raw))
 
             KeyPair(publicKey, privateKey)
         } catch (_: Exception) {
             null
+        } finally {
+            // Расшифрованный приватный ключ не остаётся в куче ждать дампа.
+            stored.fill(0)
         }
     }
 
+    /** Открытая часть слота: строка ключа и время создания, по строке на поле. */
+    private fun publicPart(line: String, createdAt: Long): ByteArray =
+        "$line\n$createdAt".encodeToByteArray()
+
+    private fun parsePublicPart(plain: ByteArray): SshKeyInfo? = try {
+        val text = plain.decodeToString()
+        val line = text.substringBefore('\n').trim()
+        val createdAt = text.substringAfter('\n', missingDelimiterValue = "").trim().toLong()
+        if (line.split(" ").size < 2) null else SshKeyInfo(line, fingerprintOf(line), createdAt)
+    } catch (_: Exception) {
+        null
+    }
+
     private fun fingerprintOf(line: String): String {
-        val encoded = line.split(" ").getOrNull(1).orEmpty()
-        val body = encoded.decodeBase64()
+        val body = decodeSshBase64(line.split(" ").getOrNull(1).orEmpty()) ?: return UNKNOWN_FINGERPRINT
         // Сырые 32 байта лежат за двумя length-prefixed полями заголовка.
         val raw = body.copyOfRange(body.size - ED25519_RAW_SIZE, body.size)
         return sshKeyFingerprint(raw)
@@ -142,9 +181,7 @@ class AndroidSshKeyStore(
         const val ALGORITHM = "Ed25519"
         const val ED25519_KEY_SIZE = 255
         const val ED25519_RAW_SIZE = 32
-
-        /** Имя записи приватного ключа в хранилище секретов — не хост, а слот. */
-        const val PRIVATE_KEY_SLOT = "ssh-private-key"
+        const val UNKNOWN_FINGERPRINT = "SHA256:—"
 
         /** Неизменный заголовок `SubjectPublicKeyInfo` для ed25519 (RFC 8410). */
         val ED25519_SPKI_PREFIX = byteArrayOf(
@@ -153,9 +190,18 @@ class AndroidSshKeyStore(
     }
 }
 
-/** Base64 без переводов строк — для хранения приватной части строкой. */
-private fun ByteArray.encodeBase64(): String =
-    android.util.Base64.encodeToString(this, android.util.Base64.NO_WRAP)
+/**
+ * Источник пары ключей для SSH-транспорта.
+ *
+ * Отдельный интерфейс, а не конкретный класс: транспорту нужны ровно две
+ * вещи — метка текущего ключа и сама пара, — и на этом шве он проверяется
+ * без Android Keystore.
+ */
+interface SshKeyPairs {
 
-private fun String.decodeBase64(): ByteArray =
-    android.util.Base64.decode(this, android.util.Base64.NO_WRAP)
+    /** Метка текущего ключа; `null` — ключа нет. Меняется при замене ключа. */
+    suspend fun keyStamp(): String?
+
+    /** Пара ключей или `null` — ключа нет либо он не читается. */
+    suspend fun keyPair(): KeyPair?
+}

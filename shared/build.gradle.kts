@@ -533,6 +533,16 @@ kotlin {
             // незачем, оно работает через контракт AdocRenderer.
             implementation(libs.quickjs.kt)
         }
+        getByName("androidHostTest").dependencies {
+            // JGit и sshd — только на тестовый classpath: в androidMain они
+            // compileOnly (SL-2), а compileOnly в тестовые наборы не
+            // наследуется. Нужны host-прогону базы ключей сервера
+            // (`ServerKeyDatabaseHostTest`, SL-20): это обычный JVM-код, и
+            // гонять его на устройстве значит платить телефоном за уже
+            // покрытое. Продуктовых зависимостей это не добавляет.
+            implementation(libs.jgit)
+            implementation(libs.jgit.ssh.apache)
+        }
         getByName("androidDeviceTest").dependencies {
             // kotlin("test") на Android-таргете разворачивается в kotlin-test-junit,
             // JUnit 4 приезжает с ним; runner добавляет AndroidJUnitRunner и
