@@ -42,7 +42,7 @@ toc::[]
 | S-A
 | Расширение в бандле
 | Подготовка ассета расширения, реестр расширений движка, атрибуты конвертации, режим на уровне движка
-| `shared/src/androidMain/assets/asciidoctor/**`, `shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/render/**`, `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/render/**`, `androidApp/src/debug/tools/patch-asciidoctor.py`
+| `shared/src/androidMain/assets/asciidoctor/**`, `shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/render/**`, `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/render/**`, `shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/render/**`, `shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/**`, `shared/build.gradle.kts`, `androidApp/src/debug/tools/patch-asciidoctor.py`
 | в `analysis.adoc`
 
 | S-B
@@ -107,9 +107,9 @@ E3 не начинается, пока не отвечены `OQ-1`, `OQ-2`, `OQ
 | E1
 | S-A
 | Конвертация документа с `[plantuml]` даёт `img` с адресом Kroki; режим `ВЫКЛ`, переданный параметром, убирает адреса совсем
-| FR-1, FR-2, FR-3, FR-4, FR-6, TC-1…TC-5
+| FR-1, FR-2, FR-4, FR-6, TC-1…TC-5, TC-35; `FR-3` — движковая половина
 | —
-| {st-todo}
+| {st-done}
 
 | SL-2
 | E1
@@ -206,6 +206,10 @@ E3 не начинается, пока не отвечены `OQ-1`, `OQ-2`, `OQ
 
 Слайс годен, только если выполнено *всё*: вертикальный, трассируем (колонка «Закрывает» непуста), демонстрируем, обозрим (1–5 файлов правки), независим по входу, с пройденным циклом закрытия.
 Полные формулировки — в шаблоне скилла и в xref:../../development-rules.adoc[правилах разработки].
+
+Отдельно про счёт файлов: сгенерированные бандлы движка и скрипт, который их готовит, считаются одним артефактом.
+Ассет — вывод скрипта, а не рукописный файл, и «1–5 файлов правки» меряется тем, что написано руками.
+`SL-1` при таком счёте укладывается: скрипт с двумя ассетами, контракт рендера, движок, два файла тестов и задача сборки.
 
 Отдельно про этот план: слайсы `SL-1`, `SL-3` и `SL-5` трогают платформенный код и проверяются на устройстве.
 Инструментальный прогон запускается только с `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` и по договорённости с владельцем: устройство разделяется с другими работами, а прогон сносит выданные SAF-разрешения (CLAUDE.md).

@@ -43,6 +43,26 @@ if (typeof globalThis.TextEncoder === 'undefined') {
     }
   };
 }
+if (typeof globalThis.btoa === 'undefined') {
+  globalThis.btoa = function (input) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const str = String(input);
+    let out = '';
+    for (let i = 0; i < str.length; i += 3) {
+      const c1 = str.charCodeAt(i);
+      const c2 = str.charCodeAt(i + 1);
+      const c3 = str.charCodeAt(i + 2);
+      if (c1 > 0xff || (!isNaN(c2) && c2 > 0xff) || (!isNaN(c3) && c3 > 0xff)) {
+        throw new Error('btoa: символ вне диапазона Latin-1');
+      }
+      out += alphabet[c1 >> 2];
+      out += alphabet[((c1 & 3) << 4) | (isNaN(c2) ? 0 : c2 >> 4)];
+      out += isNaN(c2) ? '=' : alphabet[((c2 & 15) << 2) | (isNaN(c3) ? 0 : c3 >> 6)];
+      out += isNaN(c3) ? '=' : alphabet[c3 & 63];
+    }
+    return out;
+  };
+}
 // --- Конец добавленного блока ---
 
 var version = "4.0.10";

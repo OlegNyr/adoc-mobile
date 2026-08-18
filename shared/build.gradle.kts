@@ -330,6 +330,68 @@ val verifyGitSeamIsPlatformNeutral = tasks.register("verifyGitSeamIsPlatformNeut
     }
 }
 
+/**
+ * TC-4 фичи 008-diagrams: ассет расширения Kroki собран по рецепту ADR-008.
+ *
+ * Рецепт — не деталь реализации, а условие работоспособности: без обёртки в
+ * IIFE два бандла в одной глобальной области падают на
+ * `SyntaxError: redeclaration of 'packageJson'`, а без полифила `btoa`
+ * расширение не может закодировать диаграмму в адрес. И то и другое видно
+ * только на устройстве и только когда до диаграммы дошла очередь, поэтому
+ * проверка вынесена на сборку — тем же приёмом, что verifyFontDeclarations.
+ *
+ * Ассет собирается скриптом androidApp/src/debug/tools/patch-asciidoctor.py и
+ * коммитится, как и ядро: сборка JS в Gradle-конвейер не входит.
+ */
+val verifyKrokiAsset = tasks.register("verifyKrokiAsset") {
+    group = "verification"
+    description = "Бандлы движка собраны по рецепту ADR-008"
+
+    val bundleDir = layout.projectDirectory.dir("src/androidMain/assets/asciidoctor")
+    val coreFile = bundleDir.file("asciidoctor.js").asFile
+    val krokiFile = bundleDir.file("asciidoctor-kroki.js").asFile
+    // Именно files, а не dir: на отсутствующем каталоге снимок входов падает
+    // раньше doLast, и заботливо написанные сообщения про пропавший файл никогда
+    // не показываются — а это самый вероятный сценарий (свежий клон, сбой слияния).
+    inputs.files(coreFile, krokiFile).withPropertyName("bundles").optional()
+
+    doLast {
+        check(coreFile.isFile) { "Нет бандла ядра $coreFile (TC-4)" }
+        check(krokiFile.isFile) { "Нет ассета расширения $krokiFile (TC-4, FR-2)" }
+
+        val coreText = coreFile.readText()
+        val preludeEnd = coreText.indexOf("// --- Конец добавленного блока ---")
+        check(preludeEnd > 0) { "В бандле ядра нет пролога patch-asciidoctor.py (TC-4, FR-2)" }
+        // Полифил обязан стоять *в прологе*, а не «где-нибудь в файле»: порядок и
+        // есть предмет рецепта — к моменту, когда расширение вызовет btoa, он
+        // должен уже существовать. Совпадение в теле бандла или в комментарии
+        // ничего не гарантирует.
+        check(coreText.lastIndexOf("globalThis.btoa", preludeEnd) > 0) {
+            "В прологе ядра нет полифила btoa (TC-4, FR-2): расширение не сможет закодировать диаграмму в адрес"
+        }
+        check(coreText.contains("globalThis.Asciidoctor = {")) {
+            "Бандл ядра не выставляет globalThis.Asciidoctor (TC-4, ADR-008)"
+        }
+        check(!coreText.contains("import.meta")) {
+            "В бандле ядра остался import.meta (TC-4): вне модуля это синтаксическая ошибка, движок не поднимется"
+        }
+
+        val krokiText = krokiFile.readText().trim()
+        check(krokiText.startsWith("(function () {")) {
+            "Ассет расширения не завёрнут в IIFE (TC-4, ADR-008): два бандла в одной глобальной области дадут redeclaration of 'packageJson'"
+        }
+        // Именно в хвосте, а не «где-нибудь»: присваивание — последнее, что делает
+        // скрипт, и упоминание имени в середине файла ничего не значит. И именно
+        // `default`: движок зовёт AsciidoctorKroki.default.register, и переход
+        // апстрима на именованный экспорт обязан валить сборку, а не устройство.
+        check(Regex("""globalThis\.AsciidoctorKroki = \{[^}]*\bdefault:[^}]*\};\s*\}\)\(\);$""").containsMatchIn(krokiText)) {
+            "Ассет расширения не заканчивается присваиванием globalThis.AsciidoctorKroki с полем default (TC-4, ADR-008): движку нечего регистрировать"
+        }
+        check(!Regex("""^\s*export\s*\{""", RegexOption.MULTILINE).containsMatchIn(krokiText)) {
+            "В ассете расширения остался export (TC-4, ADR-008): скрипт исполняется глобально, модулей у движка нет"
+        }
+    }
+}
 tasks.named("check") {
     dependsOn(
         verifyNoColorLiterals,
@@ -339,6 +401,7 @@ tasks.named("check") {
         verifyHighlightIsPlatformNeutral,
         verifyRenderSeams,
         verifyGitSeamIsPlatformNeutral,
+        verifyKrokiAsset,
     )
 }
 

@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
  * на устройстве, а не рассуждением. Стенд при этом остаётся стендом — он меряет,
  * а этот код рендерит по требованию.
  *
- * Три вещи, каждая из которых уже стоила отладки:
+ * Четыре вещи, каждая из которых уже стоила отладки:
  *
  * . *Свой поток с известным стеком* (`FR-4`). Разбор AsciiDoc рекурсивен, а
  *   `maxStackSize` в QuickJS — проверка против настоящего стека потока: лимит
@@ -33,6 +33,10 @@ import java.util.concurrent.Executors
  *   дешёвым вызовом.
  * . *Движок и бандл — один экземпляр на процесс* (`FR-3`). Дорого не создание
  *   рантайма, а разбор и выполнение ~865 КБ скрипта: 46–49 мс на всё про всё.
+ * . *Бандла два, и порядок важен* (`ADR-008`, фича 008). Расширение Kroki
+ *   исполняется следом за ядром и опирается на его пролог с полифилами; своё
+ *   тело оно держит внутри IIFE, иначе объявления двух бандлов сталкиваются
+ *   именами. Реестр расширений собирается тут же, один раз (`FR-6` фичи 008).
  */
 
 /**
@@ -44,6 +48,13 @@ import java.util.concurrent.Executors
  * стенд `T-013`, поэтому слияние ассетов оставляет стенд рабочим.
  */
 private const val BUNDLE_ASSET = "asciidoctor/asciidoctor.js"
+
+/**
+ * Ассет расширения Kroki — второй самодостаточный скрипт рядом с ядром
+ * (`ADR-008`). Собирается тем же `patch-asciidoctor.py`, сверяется задачей
+ * сборки `verifyKrokiAsset` (`TC-4` фичи 008).
+ */
+private const val KROKI_ASSET = "asciidoctor/asciidoctor-kroki.js"
 
 /**
  * Размер стека потока движка, КБ. Значение — из замеров `T-013`: на нём документ
@@ -94,12 +105,42 @@ internal fun engineSurvives(failure: Throwable): Boolean = failure is Cancellati
  * попадает — проверено прогоном обеих реализаций 2026-08-17, — а дизайн 02a его
  * показывает. Режим безопасности не задаётся намеренно: он развилка владельца
  * (`OQ-6`), и до ответа берётся умолчание движка.
+ *
+ * Реестр расширений подставляется *условно* (`FR-3` фичи 008): выключенные
+ * диаграммы — это конвертация вообще без расширения, а не расширение с пустым
+ * адресом. Тогда в выводе не появляется ни одного адреса Kroki и отправлять
+ * наружу нечего — решение владельца `OQ-2`.
  */
 private const val CONVERT_SCRIPT = """
-globalThis.__adocHtml = await globalThis.Asciidoctor.convert(
-  globalThis.__adocSource,
-  { standalone: false, attributes: { showtitle: '' } }
-);
+const options = { standalone: false, attributes: { showtitle: '' } };
+if (globalThis.__adocKrokiEnabled) {
+  options.extension_registry = globalThis.__adocKrokiRegistry;
+  options.attributes['kroki-server-url'] = globalThis.__adocKrokiServerUrl;
+}
+globalThis.__adocHtml = await globalThis.Asciidoctor.convert(globalThis.__adocSource, options);
+"""
+
+/**
+ * Подъём расширения Kroki: реестр создаётся один раз вместе с движком (`FR-6`
+ * фичи 008).
+ *
+ * Реестр — состояние, и переиспользование одного экземпляра на нескольких
+ * документах могло бы молча перестать работать со второй конвертации; `TC-3`
+ * проверяет, что не перестаёт. Оно работает потому, что сброс реестра между
+ * документами сохраняет расширения, зарегистрированные вне активации.
+ *
+ * Плата за синглтон названа здесь, чтобы её не искали потом: реестр и общий
+ * контекст расширения удерживают ссылку на *последний* обработанный документ,
+ * пока не придёт следующий. Один документ за раз и предельный размер ~1000
+ * строк (`ADR-004`) делают это приемлемым; если предел вырастет, удержание
+ * придётся пересматривать вместе с ним.
+ *
+ * Регистрируются все тридцать типов диаграмм разом: выборочной регистрации у
+ * расширения нет, а перечень типов — знание эталона, а не наше.
+ */
+private const val KROKI_REGISTER_SCRIPT = """
+globalThis.__adocKrokiRegistry = globalThis.Asciidoctor.Extensions.create();
+globalThis.AsciidoctorKroki.default.register(globalThis.__adocKrokiRegistry);
 """
 
 /**
@@ -122,6 +163,33 @@ private var installedAssets: AssetManager? = null
 fun installAdocRenderer(context: Context) {
     installedAssets = context.applicationContext.assets
 }
+
+/**
+ * Поднимает расширение Kroki поверх уже живого ядра; `false` — расширение
+ * недоступно (`TC-37`).
+ *
+ * Отдельная функция, а не строки внутри `engine()`, по двум причинам. Первая —
+ * проверяемость: сломанный или отсутствующий ассет иначе никак не
+ * воспроизвести, а именно этот путь и опасен. Вторая — граница отказа: всё, что
+ * пойдёт не так здесь, обязано остаться здесь. Диаграммы — дополнение к
+ * рендеру; документ без них показывается, документ без движка — нет.
+ *
+ * Отмена сквозь эту границу проходит: она не отказ расширения, а решение
+ * вызывающего (тот же принцип, что в [engineSurvives]).
+ */
+internal suspend fun installKrokiExtension(engine: QuickJs, bundle: String): Boolean =
+    try {
+        // Скрипт, а не модуль, и строго после ядра (ADR-008): пролог с полифилами
+        // приезжает с ядром, а тело расширения завёрнуто в IIFE — иначе
+        // объявления двух бандлов сталкиваются именами.
+        engine.evaluate<Any?>(bundle, filename = "asciidoctor-kroki.js", asModule = false)
+        engine.evaluate<Any?>(KROKI_REGISTER_SCRIPT, filename = "kroki-register.js")
+        true
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (failure: Exception) {
+        false
+    }
 
 /** @see AdocRenderer */
 actual fun adocRenderer(): AdocRenderer = QuickJsAdocRenderer
@@ -161,12 +229,34 @@ internal object QuickJsAdocRenderer : AdocRenderer {
     internal var initCount: Int = 0
         private set
 
-    override suspend fun render(source: String): String = turn.withLock {
+    /**
+     * Удалось ли поднять расширение Kroki. Оракул `TC-37`.
+     *
+     * Пока это знание никому, кроме тестов, не видно: сообщить пользователю
+     * «диаграммы недоступны» некому — плашка и пометка появляются в `SL-2`.
+     * Наблюдаемое поведение при `false` совпадает с режимом `ВЫКЛ`: блок
+     * диаграммы остаётся исходным текстом.
+     */
+    internal var krokiAvailable: Boolean = false
+        private set
+
+    override suspend fun render(source: String): String = render(source, DiagramOptions.Disabled)
+
+    override suspend fun render(source: String, diagrams: DiagramOptions): String = turn.withLock {
         val literal = jsonStringLiteral(source)
+        // Адрес сервера пересекает границу с JS тем же способом, что документ
+        // (FR-5 фичи 003): подстановка сырой строки в текст скрипта — инъекция,
+        // а не «кривой адрес».
+        val serverLiteral = jsonStringLiteral(diagrams.serverUrl)
         withContext(engineDispatcher) {
             val engine = engine()
             try {
                 engine.evaluate<Any?>("globalThis.__adocSource = $literal;", filename = "source.js")
+                engine.evaluate<Any?>(
+                    "globalThis.__adocKrokiEnabled = ${diagrams.krokiEnabled && krokiAvailable};" +
+                        "globalThis.__adocKrokiServerUrl = $serverLiteral;",
+                    filename = "diagrams.js",
+                )
                 engine.evaluate<Any?>(CONVERT_SCRIPT, filename = "convert.mjs", asModule = true)
                 engine.evaluate<String>("globalThis.__adocHtml", filename = "fetch.js")
             } catch (failure: Throwable) {
@@ -193,6 +283,14 @@ internal object QuickJsAdocRenderer : AdocRenderer {
             "Рендерер не установлен: вызовите installAdocRenderer(context) при старте приложения"
         }
         val bundle = assets.open(BUNDLE_ASSET).use { it.readBytes().decodeToString() }
+        // Ассет расширения читается «мягко»: диаграммы — дополнение к рендеру, а
+        // не его условие (FR-19). Умолчание режима — ВЫКЛ (решение владельца
+        // OQ-2), то есть большинству запусков расширение вообще не понадобится,
+        // и уронить из-за него показ документа было бы худшим из возможных
+        // поведений.
+        val krokiBundle = runCatching {
+            assets.open(KROKI_ASSET).use { it.readBytes().decodeToString() }
+        }.getOrNull()
 
         val created = QuickJs.create(engineDispatcher)
         try {
@@ -209,6 +307,11 @@ internal object QuickJsAdocRenderer : AdocRenderer {
             runCatching { created.close() }
             throw failure
         }
+
+        // Расширение поднимается уже поверх живого ядра и на отказ ядра не влияет
+        // (TC-37): недоступное расширение означает документ без диаграмм, а не
+        // приложение без превью.
+        krokiAvailable = krokiBundle != null && installKrokiExtension(created, krokiBundle)
 
         quickJs = created
         initCount++

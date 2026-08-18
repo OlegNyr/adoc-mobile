@@ -7,7 +7,7 @@
 :owner: onyrk
 :created: 2026-08-18
 :updated: 2026-08-18
-:targets: shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/diagram/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/settings/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/preview/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/render/**, shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/diagram/**, shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/settings/**, shared/src/androidMain/assets/asciidoctor/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/**, androidApp/src/debug/tools/patch-asciidoctor.py
+:targets: shared/build.gradle.kts, shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/render/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/diagram/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/settings/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/preview/**, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/render/**, shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/diagram/**, shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/settings/**, shared/src/androidMain/assets/asciidoctor/**, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/**, androidApp/src/debug/tools/patch-asciidoctor.py
 :toc: macro
 :toc-title: Содержание
 :sectanchors:
@@ -86,12 +86,12 @@ toc::[]
 | US-E6-01, T-080
 
 | FR-2
-| Подготовка ассета расширения ДОЛЖНА быть воспроизводимой одной командой: обёртка в IIFE, замена финального `export` на присваивание `globalThis`, полифил `btoa`
+| Подготовка бандлов ДОЛЖНА быть воспроизводимой скриптом: ассет расширения — обёртка в IIFE и замена финального `export` на присваивание `globalThis`; полифил `btoa`, нужный расширению, добавляется в пролог *ядра*, потому что ядро исполняется первым (`ADR-008`)
 | Must
 | ADR-008, разведка Q1
 
 | FR-3
-| Регистрация расширения ДОЛЖНА зависеть от режима диаграмм: в режиме `ВЫКЛ` расширение не регистрируется, и адрес Kroki в HTML не появляется вовсе
+| Конвертация в режиме `ВЫКЛ` ДОЛЖНА идти без расширения: реестр в неё не передаётся, и адрес Kroki в HTML не появляется вовсе. Сама регистрация выполняется один раз при подъёме движка (`FR-6`) — режим переключает не её, а участие реестра в конвертации
 | Must
 | US-E6-02, разведка Q3
 
@@ -219,9 +219,9 @@ toc::[]
 | ID | Требование | Приоритет | Источник
 
 | FR-23
-| Режим рендера диаграмм ДОЛЖЕН быть настройкой, переживающей перезапуск; значение по умолчанию — `KROKI`
+| Режим рендера диаграмм (`KROKI` или `ВЫКЛ`) ДОЛЖЕН быть настройкой, переживающей перезапуск; значение по умолчанию — `ВЫКЛ` (`OQ-2`)
 | Must
-| US-E6-01, макет 06, видение
+| US-E6-01, макет 06, `OQ-1`, `OQ-2`
 
 | FR-24
 | Адрес сервера Kroki ДОЛЖЕН быть настройкой со значением по умолчанию `https://kroki.io`; пустое значение означает возврат к умолчанию
@@ -229,9 +229,9 @@ toc::[]
 | US-E6-01, макет 06
 
 | FR-25
-| Адрес ДОЛЖЕН проверяться на входе: принимается только абсолютный `http(s)`-адрес без пути запроса; недопустимый не сохраняется, и пользователь видит причину
+| Адрес ДОЛЖЕН проверяться на входе: принимается только абсолютный `https`-адрес без пути запроса (`OQ-3`); недопустимый не сохраняется, и пользователь видит причину
 | Must
-| NFR безопасности
+| NFR безопасности, `OQ-3`
 
 | FR-26
 | В настройках ДОЛЖНА быть проверка сервера, показывающая исход и задержку в миллисекундах
@@ -489,7 +489,7 @@ npm-пакет `asciidoctor-kroki` 1.0.1 (только как источник �
 === Движок и бандл
 
 TC-1 (happy, automatable, устройство) — покрывает FR-1, UC-1::
-`[@test] (нет)`
+`[@test]` shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramEngineTest.kt
 [source,gherkin]
 ----
 Given движок с зарегистрированным расширением Kroki и адресом сервера https://kroki.example
@@ -499,37 +499,42 @@ And   текста диаграммы в HTML нет
 ----
 
 TC-2 (happy, automatable, устройство) — покрывает FR-3, UC-7::
-`[@test] (нет)`
+`[@test]` shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramEngineTest.kt
 [source,gherkin]
 ----
-Given движок в режиме ВЫКЛ (расширение не зарегистрировано)
-When  конвертируется тот же документ
-Then  в HTML нет ни одного адреса Kroki
-And   блок выведен литеральным с исходным текстом
+Given движок, только что отрендеривший тот же документ с включёнными диаграммами
+When  документ конвертируется с выключенными диаграммами
+And   затем конвертируется вызовом без опций — той формой, которой пользуется продукт
+Then  в обоих выводах нет ни одного адреса Kroki
+And   блок в обоих случаях выведен литеральным с исходным текстом
 ----
 
 TC-3 (edge, automatable, устройство) — покрывает FR-6::
-`[@test] (нет)`
+`[@test]` shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramEngineTest.kt
 [source,gherkin]
 ----
-Given движок поднят один раз
+Given движок-синглтон процесса
 When  выполняются два рендера подряд
-Then  счётчик подъёмов движка равен 1
+Then  первый рендер поднимает движок не более одного раза
+And   второй не поднимает его вовсе, а счётчик подъёмов не равен нулю
 And   оба вывода содержат адрес диаграммы
 ----
 
 TC-4 (negative, automatable, сборка) — покрывает FR-2::
-`[@test] (нет)`
+`[@test]` shared/build.gradle.kts, задача `verifyKrokiAsset`
 [source,gherkin]
 ----
-Given ассет расширения, собранный скриптом подготовки
-When  проверяется его содержимое
-Then  файл начинается обёрткой-функцией, заканчивается присваиванием globalThis.AsciidoctorKroki
-And   финального export в файле нет
+Given бандлы, собранные скриптом подготовки
+When  проверяется их содержимое
+Then  ассет расширения начинается обёрткой-функцией и заканчивается присваиванием
+      globalThis.AsciidoctorKroki с полем default — именно его зовёт движок
+And   финального export в нём нет
+And   в бандле ядра есть полифил btoa, и он стоит в прологе, до тела бандла
+And   в бандле ядра нет import.meta, а globalThis.Asciidoctor выставлен
 ----
 
 TC-5 (edge, automatable, устройство) — покрывает FR-1, FR-19::
-`[@test] (нет)`
+`[@test]` shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramEngineTest.kt
 [source,gherkin]
 ----
 Given движок с расширением
@@ -537,6 +542,60 @@ When  конвертируется блок [plantuml, format=txt], которо
 Then  конвертация не падает
 And   блок выведен с ролью kroki-error и исходным текстом диаграммы
 ----
+
+TC-35 (negative, automatable, устройство) — покрывает `FR-4`, `NFR-8`::
+`[@test]` shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramEngineTest.kt
+[source,gherkin]
+----
+Given документ, объявляющий свой :kroki-server-url: https://evil.example
+And   настройки, задающие сервер https://kroki.example
+When  документ конвертируется с включёнными диаграммами
+Then  адрес изображения начинается на https://kroki.example
+And   адреса evil.example в выводе нет
+----
+
+Заведён при закрытии `SL-1`: документ пользователя — недоверенный ввод, и возможность перебить адрес сервера изнутри документа означала бы отправку диаграмм на произвольный сервер при том, что в настройках у пользователя значится свой.
+Поведение движка оказалось безопасным (атрибут из API сильнее объявленного в документе); тест фиксирует его, чтобы оно не поменялось молча при обновлении.
+
+TC-36 (happy, automatable) — покрывает `FR-23`, `FR-24`::
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramOptionsTest.kt
+[source,gherkin]
+----
+Given параметры рендера, собранные без указания режима
+When  читаются их значения
+Then  диаграммы выключены
+And   адрес сервера равен https://kroki.io
+----
+
+Заведён при закрытии `SL-1`: умолчание `ВЫКЛ` — решение владельца (`OQ-2`), а не деталь реализации, и до этого теста его смена в одной строке не роняла ни одного прогона.
+Живёт в `commonTest`, потому что платформы здесь нет вовсе.
+
+TC-37 (negative, automatable, устройство) — покрывает `FR-19`, `FR-21`::
+`[@test]` shared/src/androidDeviceTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramEngineTest.kt
+[source,gherkin]
+----
+Given живое ядро движка и заведомо сломанный ассет расширения
+When  расширение поднимается поверх ядра
+Then  подъём расширения сообщает об отказе
+And   конвертация документа после этого работает как обычно
+----
+
+Заведён при закрытии `SL-1`: цена ошибки несимметрична.
+Без расширения теряются диаграммы, без движка — весь документ, причём и у тех, у кого диаграммы выключены, а это умолчание (`OQ-2`).
+
+TC-38 (negative, automatable) — покрывает `NFR-8`, `FR-13`::
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/render/DiagramOptionsTest.kt
+[source,gherkin]
+----
+Given адрес сервера вида https://kroki.io" data-x="
+When  из него собираются параметры рендера
+Then  значение отвергается с ошибкой
+And   обычные адреса (с портом, с адресом в частной сети) принимаются
+----
+
+Заведён при закрытии `SL-1`: адрес пересекает две границы, а не одну.
+Подстановку в текст скрипта закрывает сериализация в литерал JSON, но дальше расширение склеивает из адреса ссылку на изображение, а конвертер подставляет её в `+<img src="…">+` *без* экранирования — в отличие от `alt`.
+Проверка формата адреса остаётся за настройками (`FR-25`); здесь отсекается ровно то, что делает значение опасным для разметки.
 
 === Разрешение адресов и деградация
 
@@ -710,7 +769,7 @@ TC-22 (happy, automatable) — покрывает FR-23, FR-24::
 ----
 Given чистая установка
 When  читаются настройки диаграмм
-Then  режим равен KROKI
+Then  режим равен ВЫКЛ
 And   адрес сервера равен https://kroki.io
 And   офлайн-кэш включён
 ----
@@ -720,7 +779,7 @@ TC-23 (negative, automatable) — покрывает FR-25::
 [source,gherkin]
 ----
 Given настройки диаграмм
-When  сохраняется адрес "javascript:alert(1)", "kroki.io" (без схемы) или "https://kroki.io/render?x=1"
+When  сохраняется адрес "javascript:alert(1)", "kroki.io" (без схемы), "http://kroki.acme.io" или "https://kroki.io/render?x=1"
 Then  ни один из них не принят
 And   действующим остаётся прежний адрес
 ----
@@ -871,12 +930,12 @@ xref:../../adr/adr-011-diagram-degradation.adoc[ADR-011] — деградаци�
 |===
 | Требование | Use Case | Test Case | Слайс | Статус
 
-| FR-1 | UC-1 | TC-1 | SL-1 | {st-todo}
-| FR-2 | UC-1 | TC-4 | SL-1 | {st-todo}
-| FR-3 | UC-7 | TC-2 | SL-1, SL-9 | {st-todo}
-| FR-4 | UC-1 | TC-1 | SL-1 | {st-todo}
+| FR-1 | UC-1 | TC-1 | SL-1 | {st-done}
+| FR-2 | UC-1 | TC-4 | SL-1 | {st-done}
+| FR-3 | UC-7 | TC-2 | SL-1, SL-9 | частично: движковая половина закрыта
+| FR-4 | UC-1 | TC-1, TC-35 | SL-1 | {st-done}
 | FR-5 | UC-5 | TC-28 | SL-6 | {st-todo}
-| FR-6 | UC-1 | TC-3 | SL-1 | {st-todo}
+| FR-6 | UC-1 | TC-3 | SL-1 | {st-done}
 | FR-7 | UC-1 | TC-6 | SL-3 | {st-todo}
 | FR-8 | UC-1 | TC-7 | SL-3 | {st-todo}
 | FR-9 | UC-1, UC-4 | TC-20 | SL-3 | {st-todo}
@@ -907,10 +966,13 @@ xref:../../adr/adr-011-diagram-degradation.adoc[ADR-011] — деградаци�
 | NFR-5 | UC-4 | TC-21 | SL-4 | {st-todo}
 | NFR-6 | UC-8 | TC-15 | SL-5 | {st-todo}
 | NFR-7 | UC-5 | TC-23 | SL-7 | к редактору неприменимо
-| NFR-8 | UC-3 | TC-29, TC-30 | SL-4 | {st-todo}
+| NFR-8 | UC-3 | TC-29, TC-30, TC-35 | SL-1, SL-4 | частично: TC-35 закрыт
 | NFR-9 | UC-3 | TC-31 | SL-2 | {st-todo}
 | NFR-10 | — | TC-33 | SL-2 | {st-todo}
 | — | UC-1 | TC-34 | SL-12 | {st-todo}
+| FR-13 (частично) | UC-1 | TC-38 | SL-1, SL-2 | частично: граница адреса закрыта
+| FR-19 (частично) | UC-3 | TC-37 | SL-1, SL-2 | частично: отказ расширения не роняет рендер
+| FR-23 (частично) | UC-5 | TC-36 | SL-1, SL-6 | частично: умолчание закреплено
 |===
 
 == Решённые вопросы
@@ -1021,6 +1083,16 @@ _Варианты._
 (а) Задать `figure-caption` в этой фиче — цена: изменение касается фичи 003 и её корпуса сверки.
 (б) Вынести отдельной задачей потока локализации вывода — цена: до тех пор подпись остаётся английской.
 _Влияет на:_ FR-28, корпус сверки фичи 003.
+
+* [ ] *OQ-10. Контракт рендера расширен вторым методом — оставляем ли так.*
+`FR-1` фичи 003, xref:../../asciidoc-editor-vision.adoc[видение] и `CLAUDE.md` называют единственным контрактом `suspend fun render(source: String): String`.
+Диаграммам нужно передать в конвертацию режим и адрес, и в `SL-1` это сделано вторым методом `render(source, diagrams)` с реализацией по умолчанию, сводящей его к первому.
+Развилка не была заведена до реализации — это упущение аналитики, найденное ревью слайса.
+_Варианты._
+(а) Оставить как есть, поправив `FR-1` фичи 003, видение и `CLAUDE.md` — цена: контракт перестаёт быть однострочным, а реализация, забывшая переопределить второй метод (iOS), молча вернёт документ без диаграмм; сборкой это не ловится.
+(б) Сделать двухаргументный метод единственным (однопараметрический — с умолчанием) — цена: правка обеих подделок рендерера в `commonTest/screen`, то есть заход в зону параллельных работ; зато потерять диаграммы молча становится невозможно.
+(в) Вынести диаграммы из контракта рендера вовсе — например, отдельным интерфейсом поверх — цена: третий тип на ровном месте и лишний слой в пайплайне.
+_Влияет на:_ `FR-1` фичи 003, `NFR-4` (паритет платформ), `SL-3`, реализация iOS.
 
 == Ссылки
 
