@@ -69,6 +69,25 @@ class AdocViewportWindowTest {
     }
 
     @Test
+    fun TC_41_windowShrinksWithTheDocument() {
+        // Дефект, найденный владельцем на устройстве: каретка в начале строки и
+        // backspace склеивают строки, документ становится короче на строку.
+        // Прежнее окно упиралось в конец документа, поэтому «износ снизу» его не
+        // отвергал, и редактор просил у раскладки строку, которой больше нет:
+        // IllegalArgumentException в getLineEnd — падение приложения.
+        val window = windowAround(firstVisible = 10, lastVisible = 20, lastLineIndex = 23)
+        assertEquals(23, window.lastLine)
+
+        // Документ усох: последняя строка теперь 22.
+        assertFalse(
+            window.covers(firstVisible = 10, lastVisible = 20, lastLineIndex = 22),
+            "окно за концом документа не годно: раскладка такой строки не знает",
+        )
+        val refreshed = refreshedWindow(window, 10, 20, 22)
+        assertTrue(refreshed.lastLine <= 22, "обновлённое окно обязано умещаться в документ")
+    }
+
+    @Test
     fun visibleAreaOutsideTheWindowAlwaysRefreshes() {
         val window = windowAround(firstVisible = 100, lastVisible = 130, lastLineIndex = 10_000)
 

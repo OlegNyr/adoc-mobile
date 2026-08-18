@@ -39,6 +39,12 @@ fun AdocTextMetrics.toTextStyle(family: FontFamily): TextStyle = TextStyle(
     fontSize = size,
     letterSpacing = letterSpacing,
     lineHeight = lineHeight,
+    // Лигатуры выключены везде, где показывается разметка. JetBrains Mono
+    // склеивает `===`, `----`, `->` в один глиф — красиво в коде на языке
+    // программирования и вредно здесь: пользователь перестаёт понимать, что
+    // именно он набрал, а ограничители AsciiDoc считаются посимвольно
+    // (решение владельца по итогам прогона на устройстве, 2026-08-18).
+    fontFeatureSettings = "liga 0, clig 0, calt 0, dlig 0",
 )
 
 /**

@@ -107,6 +107,7 @@ fun previewStylesheet(
         .paragraph p { margin: 0 0 1em; }
         .title, .attribution {
           font-family: $mono, monospace;
+          font-variant-ligatures: none;
           font-size: 11px;
           letter-spacing: 0.05em;
           text-transform: uppercase;
@@ -120,6 +121,7 @@ fun previewStylesheet(
         }
         #toctitle {
           font-family: $mono, monospace;
+          font-variant-ligatures: none;
           font-size: 11px;
           font-weight: normal;
           letter-spacing: 0.1em;
@@ -135,6 +137,7 @@ fun previewStylesheet(
         #toc a { text-decoration: none; }
         pre, code {
           font-family: $mono, monospace;
+          font-variant-ligatures: none;
           font-size: 13px;
           color: $textSecondary;
         }
@@ -171,6 +174,7 @@ fun previewStylesheet(
         }
         .admonitionblock td.icon .title {
           font-family: $mono, monospace;
+          font-variant-ligatures: none;
           font-size: 11px;
           letter-spacing: 0.1em;
           text-transform: uppercase;

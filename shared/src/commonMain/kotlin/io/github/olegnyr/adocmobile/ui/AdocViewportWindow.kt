@@ -46,6 +46,11 @@ internal fun LineWindow.covers(
     lastLineIndex: Int,
     slack: Int = WINDOW_SLACK_LINES,
 ): Boolean {
+    // Документ мог усохнуть: backspace в начале строки склеивает её с
+    // предыдущей, и строк становится меньше. Окно за концом документа не годно
+    // ни при какой видимой области — раскладка такой строки уже не знает, и
+    // запрос смещения по ней роняет приложение (дефект найден на устройстве).
+    if (lastLine > lastLineIndex) return false
     if (firstVisible < firstLine || lastVisible > lastLine) return false
     val topWornOut = firstLine > 0 && firstVisible - firstLine < slack
     val bottomWornOut = lastLine < lastLineIndex && lastLine - lastVisible < slack
