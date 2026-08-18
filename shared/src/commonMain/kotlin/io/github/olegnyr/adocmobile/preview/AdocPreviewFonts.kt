@@ -47,7 +47,13 @@ internal fun previewFontFacesFrom(fontBytes: (fileName: String) -> ByteArray): S
     buildString {
         AdocFontRole.entries.forEach { role ->
             AdocFonts.filesOf(role).forEach { file ->
-                append(fontFaceCss(previewFontFamily(role), file.weight.weight, fontBytes(file.fileName)))
+                append(
+                    fontFaceCss(
+                        previewFontFamily(role),
+                        file.weight.weight,
+                        fontBytes(file.fileName)
+                    )
+                )
             }
         }
     }
@@ -57,6 +63,7 @@ internal fun fontFaceCss(familyName: String, weight: Int, bytes: ByteArray): Str
     append("@font-face {\n")
     append("  font-family: \"").append(familyName).append("\";\n")
     append("  font-weight: ").append(weight).append(";\n")
-    append("  src: url(\"data:font/ttf;base64,").append(Base64.encode(bytes)).append("\") format(\"truetype\");\n")
+    append("  src: url(\"data:font/ttf;base64,").append(Base64.encode(bytes))
+        .append("\") format(\"truetype\");\n")
     append("}\n")
 }
