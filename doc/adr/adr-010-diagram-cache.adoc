@@ -1,6 +1,6 @@
 = ADR-010: Кэш диаграмм — файлы в приватном каталоге, ключ по адресу
 // adr-status: proposed | accepted | superseded
-:adr-status: proposed
+:adr-status: accepted
 :date: 2026-08-18
 :feature: 008-diagrams
 :sectanchors:

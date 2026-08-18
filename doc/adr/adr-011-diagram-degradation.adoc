@@ -1,6 +1,6 @@
 = ADR-011: Отказ диаграммы — блок исходного кода с пометкой, собранный нами
 // adr-status: proposed | accepted | superseded
-:adr-status: proposed
+:adr-status: accepted
 :date: 2026-08-18
 :feature: 008-diagrams
 :sectanchors:

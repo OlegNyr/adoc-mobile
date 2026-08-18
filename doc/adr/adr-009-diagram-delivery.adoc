@@ -1,6 +1,6 @@
 = ADR-009: Диаграммы разрешаются в общем коде, а не грузятся из WebView
 // adr-status: proposed | accepted | superseded
-:adr-status: proposed
+:adr-status: accepted
 :date: 2026-08-18
 :feature: 008-diagrams
 :sectanchors:
