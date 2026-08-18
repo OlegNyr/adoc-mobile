@@ -571,6 +571,107 @@ class EditorScreenModelTest {
         )
     }
 
+    @Test
+    fun TC_21_backWritesUnsavedEditThenClosesToFolderList() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+        model.openRunner()
+
+        model.typeText("исходный правленый")
+        assertEquals(0, access.written.size, "до паузы записи нет — правка ещё не на диске")
+
+        model.closeRequested()
+
+        assertEquals(
+            listOf(held.id to "исходный правленый"),
+            access.written,
+            "перед закрытием — немедленная запись несохранённой правки (FR-21)",
+        )
+        val browsing = assertIs<EditorDocument.Browsing>(
+            model.document,
+            "документ закрыт — экран вернулся к списку документов папки (TC-21)",
+        )
+        assertEquals(listOf(held), browsing.documents)
+    }
+
+    @Test
+    fun TC_21_backWithoutDivergenceClosesWithoutWrite() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+        model.start()
+        model.openRunner()
+
+        model.closeRequested()
+
+        assertEquals(0, access.written.size, "без расхождения с диском записи нет (FR-21)")
+        assertIs<EditorDocument.Browsing>(model.document, "файл на диске совпадает с полем — закрытие немедленное")
+    }
+
+    @Test
+    fun TC_21_backAfterFailedWriteKeepsDocumentOpenWithVisibleFailure() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.held = held
+        access.contents[held.id] = "исходный"
+        access.writeError = DocumentWriteError.PermissionLost
+        val model = model()
+        model.start()
+
+        model.typeText("исходный правленый")
+        model.closeRequested()
+
+        assertEquals(1, access.written.size, "попытка записи перед закрытием была")
+        assertIs<EditorDocument.Open>(
+            model.document,
+            "отказ записи отменяет закрытие: документ не закрывается втихую с потерей правок (FR-21)",
+        )
+        assertEquals(
+            DocumentWriteError.PermissionLost.userMessage("заметка.adoc"),
+            model.writeFailure,
+            "отказ виден пользователю плашкой (OQ-3), а не молчанием",
+        )
+        assertEquals("исходный правленый", model.editor.textFieldState.text.toString(), "текст остаётся в поле")
+    }
+
+    @Test
+    fun TC_21_backWithoutOpenDocumentIsSilentNoOp() {
+        val model = model()
+        model.start()
+        assertIs<EditorDocument.NoFolder>(model.document)
+
+        model.closeRequested()
+
+        assertIs<EditorDocument.NoFolder>(model.document, "без открытого документа закрывать нечего (FR-21)")
+        assertEquals(0, access.written.size, "no-op не рождает записи")
+    }
+
+    @Test
+    fun TC_21_startWithoutLiftingHeldSourceBrowsesFolder() {
+        // Пользователь закрыл документ кнопкой «назад», затем поворот: экран
+        // восстанавливает список, а не поднимает закрытый документ заново.
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+
+        model.start(liftHeldSource = false)
+
+        val browsing = assertIs<EditorDocument.Browsing>(
+            model.document,
+            "закрытый документ не поднимается после поворота (FR-21)",
+        )
+        assertEquals(listOf(held), browsing.documents)
+        assertEquals(0, access.openCalls, "удержанный источник не открывается")
+    }
+
     /** Правка как в продукте: сначала поле, затем событие модели (подписка `snapshotFlow`). */
     private fun EditorScreenModel.typeText(text: String) {
         editor.textFieldState.edit { replace(0, length, text) }

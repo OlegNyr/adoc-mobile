@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(kotlin.time.ExperimentalTime::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 
 package io.github.olegnyr.adocmobile.screen
 
@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -148,14 +149,28 @@ fun EditorScreen(
             // процесса rememberSaveable восстановит и текст, и этот id — start
             // не станет перетирать восстановленное поле чтением с диска (FR-7).
             var fieldSourceId by rememberSaveable { mutableStateOf<String?>(null) }
-            LaunchedEffect(model) { model.start(fieldSourceId) }
+
+            // Пользователь на списке, а не в документе: после «назад» (FR-21)
+            // поворот и выгрузка процесса восстанавливают список — start не
+            // поднимает закрытый документ обратно. Флаг выводится из состояния
+            // модели: любой путь к списку (закрытие, смена папки) его ставит,
+            // открытие документа — снимает.
+            var viewingList by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(model) { model.start(fieldSourceId, liftHeldSource = !viewingList) }
 
             val document = model.document
             LaunchedEffect(document) {
                 if (document is EditorDocument.Open) {
                     fieldSourceId = document.runner.document.source.id
                 }
+                viewingList = document !is EditorDocument.Open
             }
+
+            // Системная кнопка и жест «назад» Android — тот же путь, что кнопка
+            // в app bar (FR-21): перехват только при открытом документе; со
+            // списка «назад» не перехватывается — приложение сворачивается
+            // платформенным поведением, включая анимацию predictive back.
+            BackHandler(enabled = document is EditorDocument.Open) { model.closeRequested() }
 
             // Каждое изменение текста — в модель (FR-10). Подписка через
             // snapshotFlow, не в кадре композиции (NFR-1).
@@ -215,6 +230,7 @@ fun EditorScreen(
                         document = document,
                         editor = editor,
                         retryWriteVisible = model.writeFailure != null,
+                        onBack = model::closeRequested,
                         onUndo = model::undoRequested,
                         onRedo = model::redoRequested,
                         onShare = { model.shareRequested(shareDocument) },
@@ -329,7 +345,10 @@ fun EditorScreen(
  * App bar: имя файла и метка состояния (`FR-1`), высота 52 по макету «02»;
  * справа — меню документа (`FR-16`, состав — решение `OQ-4`).
  *
- * Стрелка «назад» из макета не рисуется — экрана репозитория в MVP нет.
+ * Слева от имени открытого документа — кнопка «назад» к списку документов
+ * папки (`FR-21`, решение `OQ-8`); в макете здесь стрелка, и с решением по
+ * пути «документ → список» она обрела назначение. Без открытого документа
+ * кнопки нет: список — корень навигации MVP, назад с него некуда.
  * Иконка-переключатель превью из макета опущена: дизайн-вопрос `OQ-4` о её
  * судьбе при живых вкладках не решён, а дублировать вкладку по умолчанию —
  * значит решить его за дизайнера.
@@ -342,20 +361,25 @@ private fun EditorAppBar(
     document: EditorDocument,
     editor: DocumentEditor,
     retryWriteVisible: Boolean,
+    onBack: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onShare: () -> Unit,
     onOpenFolder: () -> Unit,
     onRetryWrite: () -> Unit,
 ) {
+    val open = document is EditorDocument.Open
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .padding(start = 14.dp, end = 4.dp),
+            // При открытом документе слева стоит кнопка «назад» со своей
+            // площадкой — отступ у неё внутри, как у кнопки меню справа.
+            .padding(start = if (open) 0.dp else 14.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (document is EditorDocument.Open) {
+            BackButton(onClick = onBack)
             val runner = document.runner
             // Метка рекомпозируется по смене isModified, а не на каждый
             // символ (NFR-1): подписка на производный признак, не на документ.
@@ -474,6 +498,28 @@ private fun DocumentMenu(
                 }
             }
         }
+    }
+}
+
+/**
+ * Кнопка «назад» в app bar (`FR-21`): касаемая площадка 44×44, значок —
+ * символ `‹`, тем же приёмом, что кнопка возврата раскрытого ряда панели
+ * вставки. Макет рисует стрелку Lucide; набора иконок в проекте нет
+ * (см. [MenuButton]) — замена придёт с набором.
+ */
+@Composable
+private fun BackButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+    ) {
+        Text(
+            text = "‹",
+            style = adocTextStyle(AdocTypography.screenTitle),
+            color = AdocTheme.colors.textSecondary,
+            modifier = Modifier.align(Alignment.Center),
+        )
     }
 }
 

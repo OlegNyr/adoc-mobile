@@ -144,10 +144,15 @@ class EditorScreenModel(
      * история отмены остаётся жива (`FR-7`); поле, разошедшееся с диском, —
      * это несохранённая правка, она помечается изменённой и уходит в файл
      * автосохранением, а не теряется.
+     * @param liftHeldSource поднимать ли удержанный документ. `false` —
+     * пользователь ушёл из документа к списку («назад», `FR-21`), и
+     * восстановление после поворота возвращает список, а не закрытый документ;
+     * платформенный шов при этом продолжает удерживать источник — повторное
+     * открытие из списка не требует нового права.
      */
-    fun start(fieldSourceId: String? = null) {
+    fun start(fieldSourceId: String? = null, liftHeldSource: Boolean = true) {
         if (document is EditorDocument.Open) return
-        val held = access.heldSource()
+        val held = if (liftHeldSource) access.heldSource() else null
         if (held != null) {
             open(held, keepField = held.id == fieldSourceId)
         } else {
@@ -317,6 +322,55 @@ class EditorScreenModel(
             val settled = open.runner.documents.first { !it.isModified || it.lastSaveFailed }
             if (!settled.isModified) send(settled.source)
         }
+    }
+
+    /** Ожидание записи перед закрытием; ссылка — чтобы повторное «назад» не плодило закрытий. */
+    private var closeJob: Job? = null
+
+    /**
+     * «Назад» из открытого документа — кнопка app bar и системная кнопка/жест
+     * Android (`FR-21`, решение `OQ-8`): закрыть документ и вернуться к списку
+     * документов папки. Право на дерево удержано, системный диалог не нужен.
+     *
+     * Перед закрытием — немедленная запись несохранённых правок тем же
+     * механизмом, что уход в фон и «Поделиться»
+     * ([AutosaveRunner.movedToBackground]): текст не теряется. Отказ записи
+     * отменяет закрытие: документ остаётся на экране, а отказ виден плашкой
+     * [writeFailure] — закрыть втихую с потерей правок нельзя. Повторное
+     * «назад» при живом отказе так же молчит, как «Поделиться»: паузу
+     * автосохранения снимает явная правка или «Повторить запись», и лишь
+     * успешная запись открывает путь к списку.
+     *
+     * Без открытого документа — тихий no-op: с экрана списка системный «назад»
+     * не перехватывается и сворачивает приложение платформенным поведением.
+     */
+    fun closeRequested() {
+        val open = document as? EditorDocument.Open ?: return
+        val docScope = documentScope ?: return
+        closeJob?.cancel()
+        // Корутина — дочерняя к области документа, как у отправки: смена
+        // документа отменяет и повисшее закрытие.
+        closeJob = docScope.launch {
+            open.runner.movedToBackground()
+            // Тот же критерий, что у «Поделиться»: закрывать можно то, что
+            // легло на диск, — сигнал ждёт совпадения диска с полем либо
+            // отказа записи.
+            val settled = open.runner.documents.first { !it.isModified || it.lastSaveFailed }
+            if (!settled.isModified) closeToFolder()
+        }
+    }
+
+    /**
+     * Снять корутины закрытого документа и показать список документов папки.
+     *
+     * Плашка отказа гаснет по правилу «смена документа» ([writeFailure]):
+     * закрытие случается только после успешной записи, отказу гореть не над чем.
+     */
+    private fun closeToFolder() {
+        documentScope?.cancel()
+        documentScope = null
+        writeFailure = null
+        scope.launch { browseHeldTree() }
     }
 
     /** Приложение на переднем плане — для записи при уходе в фон. */

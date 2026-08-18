@@ -388,6 +388,12 @@ kotlin {
             api(libs.compose.ui)
             api(libs.compose.components.resources)
 
+            // Системный «назад» из commonMain (FR-21 фичи 005): общий
+            // BackHandler, на Android он делегирует OnBackPressedDispatcher
+            // активности. implementation, а не api: приложение работает через
+            // экран, самому ему перехват не нужен.
+            implementation(libs.compose.ui.backhandler)
+
             // Явно, хотя приезжает и транзитивно с Compose: Flow — часть
             // публичного контракта GitSync, suspend-швы и модели экранов
             // зависят от корутин напрямую. api по той же причине, что Compose.
