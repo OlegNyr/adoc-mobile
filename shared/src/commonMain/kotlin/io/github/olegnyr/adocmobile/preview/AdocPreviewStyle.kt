@@ -215,6 +215,23 @@ fun previewStylesheet(
           max-width: 100%;
           height: auto;
         }
+        .kroki-unavailable {
+          border: 1px solid $borderObject;
+          background-color: $raised;
+        }
+        .kroki-note {
+          font-family: $mono, monospace;
+          font-size: 11px;
+          letter-spacing: .1em;
+          color: $textMuted;
+          padding: 8px 12px;
+        }
+        .kroki-unavailable pre {
+          margin: 0;
+          border-top: 1px solid $borderList;
+          padding: 12px;
+          overflow-x: auto;
+        }
         .quoteblock {
           border-left: 2px solid $accent;
           margin: 0 0 1em;

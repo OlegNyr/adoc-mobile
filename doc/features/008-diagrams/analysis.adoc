@@ -600,7 +600,7 @@ And   обычные адреса (с портом, с адресом в час�
 === Разрешение адресов и деградация
 
 TC-6 (happy, automatable) — покрывает FR-7, UC-1::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt (подстановка адреса; загрузка — `SL-3`)
 [source,gherkin]
 ----
 Given HTML конвертера с одним <img src="https://kroki.example/plantuml/svg/eNpLVNC1U0jiAgAGdQF5">
@@ -621,7 +621,7 @@ And   плейсхолдер не является изображением
 ----
 
 TC-8 (negative, automatable) — покрывает FR-19, FR-20, UC-3::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt
 [source,gherkin]
 ----
 Given транспорт, отвечающий отказом «нет сети»
@@ -631,7 +631,7 @@ And   в блоке присутствует текстовая пометка �
 ----
 
 TC-9 (edge, automatable) — покрывает FR-21::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt
 [source,gherkin]
 ----
 Given документ с двумя диаграммами, для первой транспорт отвечает отказом, для второй — байтами
@@ -641,7 +641,7 @@ And   признака общего отказа рендера в резуль�
 ----
 
 TC-10 (negative, automatable) — покрывает FR-22::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramSourceTest.kt
 [source,gherkin]
 ----
 Given HTML с адресом Kroki, в котором payload испорчен
@@ -651,7 +651,7 @@ And   исключение наружу не выходит
 ----
 
 TC-11 (edge, automatable) — покрывает FR-13::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt
 [source,gherkin]
 ----
 Given HTML с таблицей, admonition, блоком кода и одной диаграммой
@@ -668,6 +668,44 @@ When  выполняется разрешение при пустом кэше
 Then  транспорт вызван один раз
 And   оба места показаны изображением
 ----
+
+TC-39 (edge, automatable) — покрывает `FR-13`, `NFR-8`::
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/KrokiAddressTest.kt
+[source,gherkin]
+----
+Given адрес https://kroki.example/plantuml/svg/eNpLVNC1U0jiAgAGdQF5
+When  он разбирается как адрес диаграммы
+Then  сервером признан https://kroki.example, типом plantuml, форматом svg
+And   адрес локальной картинки документа, чужая схема, пустой сегмент пути
+      и payload не из алфавита base64url диаграммой не признаются
+----
+
+Заведён при закрытии `SL-2`: распознавание — граница между «наш блок» и «чужая разметка».
+Ошибка в сторону «признать лишнее» означает подмену чужой картинки в документе пользователя, в сторону «не признать своё» — диаграмму, которая никогда не загрузится.
+
+TC-40 (happy, automatable) — покрывает `FR-22`::
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramSourceTest.kt, shared/src/androidHostTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramSourceAndroidTest.kt
+[source,gherkin]
+----
+Given payload eNpLVNC1U0jiAgAGdQF5 из настоящего прогона расширения
+When  из него восстанавливается исходник диаграммы
+Then  получен текст «a -> b», совпадающий с исходным блоком
+And   кириллическая диаграмма переживает тот же путь без потерь
+----
+
+Оркестровка проверяется в `commonTest` на подделке распаковки, настоящая распаковка — host-тестом Android: `java.util.zip` входит в JDK, и устройство для неё не нужно (`ADR-014`).
+
+TC-41 (negative, automatable) — покрывает `NFR-8`::
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramSourceTest.kt
+[source,gherkin]
+----
+Given payload, распаковывающийся в объём больше предела
+When  из него восстанавливается исходник
+Then  исходник не восстановлен, показывается одна пометка
+----
+
+Заведён при закрытии `SL-2`: payload приходит из разметки, а документ — недоверенный ввод.
+Рукотворный `+<img src="https://kroki.io/plantuml/svg/…">+` в документе иначе становится бомбой распаковки.
 
 === Загрузка, кэш, офлайн
 
@@ -835,7 +873,7 @@ And   диаграмма показана кодом с пометкой
 === Нефункциональные
 
 TC-29 (безопасность, automatable) — покрывает NFR-8::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt (адрес не доживает до страницы; журнал — `SL-3`)
 [source,gherkin]
 ----
 Given диаграмма, чей исходник содержит строку «секретный проект»
@@ -854,7 +892,8 @@ Then  оно отвергается как не-изображение
 And   блок показан кодом с пометкой
 ----
 
-TC-31 (доступность, manual) — покрывает FR-20, NFR-9::
+TC-31 (доступность, manual + automatable) — покрывает FR-20, NFR-9::
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/preview/AdocPreviewStyleTest.kt (наличие правил и гарнитуры; читаемость глазами остаётся ручной)
 [source,gherkin]
 ----
 Given документ с отказавшей диаграммой на экране
@@ -872,13 +911,14 @@ Then  проход укладывается в 10 мс
 ----
 
 TC-33 (доля общего кода, automatable, сборка) — покрывает NFR-2::
-`[@test] (нет)`
+`[@test]` shared/build.gradle.kts, задачи `verifyRenderSeams` и `verifyDiagramIsPlatformNeutral`
 [source,gherkin]
 ----
 Given исходники фичи
 When  выполняется проверка швов
 Then  expect/actual-объявлений в render и preview по-прежнему ровно два
-And   в commonMain пакета diagram нет платформенных типов
+And   в commonMain пакета diagram нет импортов java, android и платформ Native
+And   проверка валит прогон, если файлов пакета diagram не нашлось вовсе
 ----
 
 TC-34 (совместимость, manual, устройство) — покрывает FR-1::
@@ -923,6 +963,7 @@ xref:../../adr/adr-008-kroki-extension-bundle.adoc[ADR-008] — расширен
 xref:../../adr/adr-009-diagram-delivery.adoc[ADR-009] — диаграммы разрешаются в общем коде.
 xref:../../adr/adr-010-diagram-cache.adoc[ADR-010] — файловый кэш, ключ по адресу.
 xref:../../adr/adr-011-diagram-degradation.adoc[ADR-011] — деградация в код с пометкой.
+xref:../../adr/adr-014-zlib-inflate.adoc[ADR-014] — распаковка zlib платформенная, за интерфейсом общего кода.
 
 == Матрица трассируемости
 
@@ -936,22 +977,22 @@ xref:../../adr/adr-011-diagram-degradation.adoc[ADR-011] — деградаци�
 | FR-4 | UC-1 | TC-1, TC-35 | SL-1 | {st-done}
 | FR-5 | UC-5 | TC-28 | SL-6 | {st-todo}
 | FR-6 | UC-1 | TC-3 | SL-1 | {st-done}
-| FR-7 | UC-1 | TC-6 | SL-3 | {st-todo}
+| FR-7 | UC-1 | TC-6 | SL-2, SL-3 | частично: подстановка адреса закрыта
 | FR-8 | UC-1 | TC-7 | SL-3 | {st-todo}
 | FR-9 | UC-1, UC-4 | TC-20 | SL-3 | {st-todo}
 | FR-10 | UC-4 | TC-17, TC-18 | SL-4 | {st-todo}
 | FR-11 | UC-4 | TC-12 | SL-3 | {st-todo}
 | FR-12 | UC-1 | TC-19 | SL-11 | {st-todo}
-| FR-13 | UC-1 | TC-11 | SL-2 | {st-todo}
+| FR-13 | UC-1 | TC-11, TC-39 | SL-2 | {st-done}
 | FR-14 | UC-1 | TC-13 | SL-5 | {st-todo}
 | FR-15 | UC-2 | TC-13 | SL-5 | {st-todo}
 | FR-16 | UC-2, UC-8 | TC-14 | SL-5, SL-6 | {st-todo}
 | FR-17 | UC-8 | TC-15 | SL-10 | {st-todo}
 | FR-18 | UC-8 | TC-16 | SL-10 | {st-todo}
-| FR-19 | UC-3, UC-7 | TC-5, TC-8 | SL-2 | {st-todo}
-| FR-20 | UC-3 | TC-8, TC-31 | SL-2 | {st-todo}
-| FR-21 | UC-3 | TC-9 | SL-2 | {st-todo}
-| FR-22 | UC-3 | TC-10 | SL-2 | {st-todo}
+| FR-19 | UC-3, UC-7 | TC-5, TC-8 | SL-2, SL-9 | частично: путь режима `ВЫКЛ` — за `SL-9`
+| FR-20 | UC-3 | TC-8, TC-31 | SL-2, SL-9 | частично: пометка есть у деградации, у режима `ВЫКЛ` — за `SL-9`
+| FR-21 | UC-3 | TC-9 | SL-2 | {st-done}
+| FR-22 | UC-3 | TC-10, TC-40, TC-41 | SL-2 | {st-done}
 | FR-23 | UC-5 | TC-22 | SL-6 | {st-todo}
 | FR-24 | UC-5 | TC-22, TC-24 | SL-6 | {st-todo}
 | FR-25 | UC-5 | TC-23 | SL-6 | {st-todo}
@@ -960,15 +1001,15 @@ xref:../../adr/adr-011-diagram-degradation.adoc[ADR-011] — деградаци�
 | FR-28 | UC-5 | TC-31 | SL-7 | {st-todo}
 | FR-29 | — | — | — | не делается
 | NFR-1 | — | TC-32 | SL-3 | {st-todo}
-| NFR-2 | — | TC-33 | SL-2 | {st-todo}
+| NFR-2 | — | TC-33 | SL-2 | {st-done}
 | NFR-3 | UC-3, UC-7 | TC-27 | SL-9 | {st-todo}
 | NFR-4 | — | TC-33 | SL-3 | {st-todo}
 | NFR-5 | UC-4 | TC-21 | SL-4 | {st-todo}
 | NFR-6 | UC-8 | TC-15 | SL-5 | {st-todo}
 | NFR-7 | UC-5 | TC-23 | SL-7 | к редактору неприменимо
 | NFR-8 | UC-3 | TC-29, TC-30, TC-35 | SL-1, SL-4 | частично: TC-35 закрыт
-| NFR-9 | UC-3 | TC-31 | SL-2 | {st-todo}
-| NFR-10 | — | TC-33 | SL-2 | {st-todo}
+| NFR-9 | UC-3 | TC-31 | SL-2 | частично: правила стиля проверены, читаемость глазами — ручная проверка
+| NFR-10 | — | TC-33 | SL-2 | {st-done}
 | — | UC-1 | TC-34 | SL-12 | {st-todo}
 | FR-13 (частично) | UC-1 | TC-38 | SL-1, SL-2 | частично: граница адреса закрыта
 | FR-19 (частично) | UC-3 | TC-37 | SL-1, SL-2 | частично: отказ расширения не роняет рендер

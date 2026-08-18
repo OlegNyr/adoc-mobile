@@ -3,6 +3,7 @@ package io.github.olegnyr.adocmobile.render
 import android.content.Context
 import android.content.res.AssetManager
 import com.dokar.quickjs.QuickJs
+import io.github.olegnyr.adocmobile.diagram.installDiagramSupport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -162,6 +163,9 @@ private var installedAssets: AssetManager? = null
  */
 fun installAdocRenderer(context: Context) {
     installedAssets = context.applicationContext.assets
+    // Заодно ставится платформенная половина фичи диаграмм (ADR-014): точка
+    // входа у стека рендера и превью одна, и приложение уже её вызывает.
+    installDiagramSupport()
 }
 
 /**

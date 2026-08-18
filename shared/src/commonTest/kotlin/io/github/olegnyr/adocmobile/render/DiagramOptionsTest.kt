@@ -22,7 +22,7 @@ import kotlin.test.assertFalse
 class DiagramOptionsTest {
 
     @Test
-    fun `TC-36 diagrams are disabled by default`() {
+    fun TC_36_diagramsAreDisabledByDefault() {
         assertFalse(
             DiagramOptions.Disabled.krokiEnabled,
             "умолчание режима диаграмм перестало быть ВЫКЛ (решение владельца OQ-2, FR-23)",
@@ -30,7 +30,7 @@ class DiagramOptionsTest {
     }
 
     @Test
-    fun `TC-36 default server address is the public kroki`() {
+    fun TC_36_defaultServerAddressIsThePublicKroki() {
         assertEquals(
             "https://kroki.io",
             DiagramOptions(krokiEnabled = true).serverUrl,
@@ -54,7 +54,7 @@ class DiagramOptionsTest {
      * странице превью.
      */
     @Test
-    fun `TC-38 server address that could break markup is refused`() {
+    fun TC_38_serverAddressThatCouldBreakMarkupIsRefused() {
         val hostile = listOf(
             "https://kroki.io\" data-x=\"",
             "https://kroki.io/<script>",
@@ -71,7 +71,7 @@ class DiagramOptionsTest {
     }
 
     @Test
-    fun `TC-38 ordinary addresses are accepted`() {
+    fun TC_38_ordinaryAddressesAreAccepted() {
         for (address in listOf("https://kroki.io", "https://kroki.acme.io:8443", "https://192.168.1.10")) {
             DiagramOptions(krokiEnabled = true, serverUrl = address)
         }

@@ -343,6 +343,55 @@ val verifyGitSeamIsPlatformNeutral = tasks.register("verifyGitSeamIsPlatformNeut
  * Ассет собирается скриптом androidApp/src/debug/tools/patch-asciidoctor.py и
  * коммитится, как и ядро: сборка JS в Gradle-конвейер не входит.
  */
+/**
+ * TC-33 фичи 008-diagrams, вторая половина: пакет диаграмм платформенно нейтрален.
+ *
+ * Первую половину — «швов у рендера и превью по-прежнему ровно два» — держит
+ * verifyRenderSeams, но он смотрит только на пакеты render и preview и о новом
+ * пакете не знает вовсе. Это и есть тот случай, когда требование помечено
+ * закрытым, а проверять его некому.
+ *
+ * Что проверяется: в commonMain пакета diagram нет платформенных типов. Ошибка
+ * тут не стилистическая — `NFR-2` называет логику диаграмм общей, и уехавший в
+ * неё `java.util.zip` означал бы, что на iOS всё это придётся писать заново.
+ * Распаковка живёт за интерфейсом (ADR-014) именно поэтому.
+ *
+ * Проверка двусторонняя: пустой результат поиска файлов валит прогон так же,
+ * как найденный платформенный тип. Проверка, переставшая что-либо находить
+ * (пакет переименовали, каталог перенесли), хуже отсутствующей.
+ */
+val verifyDiagramIsPlatformNeutral = tasks.register("verifyDiagramIsPlatformNeutral") {
+    group = "verification"
+    description = "Пакет diagram в commonMain не знает о платформе"
+
+    val commonRoots = files(
+        rootDir.resolve("shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/diagram"),
+        rootDir.resolve("shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram"),
+    )
+    inputs.files(commonRoots).withPropertyName("sources")
+
+    doLast {
+        val sources = commonRoots.asFileTree.matching { include("**/*.kt") }.toList()
+        check(sources.isNotEmpty()) {
+            "Не найдено ни одного файла пакета diagram — проверка TC-33 перестала что-либо проверять"
+        }
+
+        val forbidden = Regex("""^import\s+(java\.|javax\.|android\.|androidx\.|kotlinx\.cinterop|platform\.)""")
+        val offenders = sources.flatMap { file ->
+            file.readLines()
+                .withIndex()
+                .filter { (_, line) -> forbidden.containsMatchIn(line.trim()) }
+                .map { (i, line) -> "  ${file.name}:${i + 1}  ${line.trim()}" }
+        }
+
+        check(offenders.isEmpty()) {
+            "Платформенный тип в общем коде диаграмм (TC-33, NFR-2, ADR-014):\n" +
+                offenders.joinToString("\n") +
+                "\nПлатформенная возможность подключается интерфейсом, как Inflate; иначе на iOS это пишется заново."
+        }
+    }
+}
+
 val verifyKrokiAsset = tasks.register("verifyKrokiAsset") {
     group = "verification"
     description = "Бандлы движка собраны по рецепту ADR-008"
@@ -402,6 +451,7 @@ tasks.named("check") {
         verifyRenderSeams,
         verifyGitSeamIsPlatformNeutral,
         verifyKrokiAsset,
+        verifyDiagramIsPlatformNeutral,
     )
 }
 

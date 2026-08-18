@@ -22,6 +22,26 @@ class AdocPreviewStyleTest {
 
     private val stylesheet = previewStylesheet(darkColors)
 
+    /**
+     * `TC-31` фичи 008 (`FR-20`, NFR доступности): блок недоступной диаграммы
+     * оформлен, и смысл несёт не цвет.
+     *
+     * Проверяется наличие правил и то, что цвета берутся из ролей палитры —
+     * литералов в этом файле нет и быть не может. Читаемость самой пометки
+     * глазами остаётся ручной проверкой: её оракул — человек.
+     */
+    @Test
+    fun TC_31_unavailableDiagramBlockIsStyled() {
+        for (selector in listOf(".kroki-unavailable", ".kroki-note", ".kroki-unavailable pre")) {
+            assertTrue(selector in stylesheet, "в стиле нет правила для «$selector»")
+        }
+        // Пометка набрана моноширинной гарнитурой служебных меток дизайна, как
+        // и прочие метки превью, а не выделена одним лишь цветом.
+        val note = stylesheet.substringAfter(".kroki-note {").substringBefore("}")
+        assertTrue("font-family" in note, "пометка не задаёт гарнитуру: $note")
+        assertTrue("letter-spacing" in note, "пометка не задаёт трекинг служебной метки: $note")
+    }
+
     // ---- TC-18: перечень классов из FR-21, снятый прогоном конвертера ----
 
     @Test

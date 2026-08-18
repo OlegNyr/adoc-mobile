@@ -1,7 +1,14 @@
 package io.github.olegnyr.adocmobile.preview
 
+import io.github.olegnyr.adocmobile.diagram.DiagramOutcome
+import io.github.olegnyr.adocmobile.diagram.DiagramSupport
+import io.github.olegnyr.adocmobile.diagram.decodeKrokiSource
+import io.github.olegnyr.adocmobile.diagram.resolveDiagramBlocks
 import io.github.olegnyr.adocmobile.theme.AdocColors
+import io.github.olegnyr.adocmobile.render.DiagramOptions
 import io.github.olegnyr.adocmobile.theme.AdocTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Оболочка документа для превью: конвертер отдаёт фрагмент, а показывать надо
@@ -43,7 +50,30 @@ import io.github.olegnyr.adocmobile.theme.AdocTheme
 suspend fun previewPage(
     fragment: String,
     colors: AdocColors = AdocTheme.defaultColors,
-): String = previewDocument(fragment, previewStylesheet(colors, previewFontFaces()))
+    diagrams: DiagramOptions = DiagramOptions.Disabled,
+): String = previewDocument(
+    resolveDiagrams(fragment, diagrams),
+    previewStylesheet(colors, previewFontFaces()),
+)
+
+/**
+ * Разрешение диаграмм — шаг между конвертером и страницей (`ADR-009`).
+ *
+ * Место выбрано не из удобства: `ADR-009` называет швом то, что пайплайн
+ * живого превью вызывает по умолчанию, а это ровно [previewPage]. Здесь же
+ * гарантируется главное свойство решения — внешний адрес до `WebView` не
+ * доходит ни при каком исходе, и сеть остаётся у нас в руках, а не у страницы.
+ *
+ * Пока исход один: диаграмма недоступна, показывается её исходник с пометкой.
+ * Загрузка, кэш и режимы придут в `SL-3`…`SL-6` и заменят собой тело этой
+ * функции, не трогая ни конвертер, ни превью.
+ */
+private suspend fun resolveDiagrams(fragment: String, diagrams: DiagramOptions): String =
+    withContext(Dispatchers.Default) {
+        resolveDiagramBlocks(fragment, diagrams.serverUrl) { address ->
+            DiagramOutcome.Unavailable(decodeKrokiSource(address.payload, DiagramSupport.inflate))
+        }
+    }
 
 fun previewDocument(
     fragment: String,
