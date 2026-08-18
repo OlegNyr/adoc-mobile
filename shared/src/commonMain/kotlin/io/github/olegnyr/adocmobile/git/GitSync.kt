@@ -84,6 +84,51 @@ interface GitSync {
     suspend fun commit(paths: List<String>, message: String, author: CommitAuthor): CommitResult
 
     /**
+     * Забрать чужие правки из origin и влить в текущую ветку (`FR-13`,
+     * `FR-14`, `FR-16`).
+     *
+     * Сетевой вызов по явному действию пользователя — fetch отдельной
+     * кнопкой не существует (решение OQ-5). Отказ без сети не меняет
+     * состояния репозитория (`FR-16`, `TC-14`); конфликт — не ошибка, а
+     * исход [PullResult.Conflicted] со списком файлов для экрана слияния.
+     */
+    suspend fun pull(): PullResult
+
+    /**
+     * Конфликтные участки файла, оставленного неуспешным merge (`FR-23`).
+     * Пустой список — файл разметки конфликта не содержит.
+     */
+    suspend fun conflictHunks(path: String): List<ConflictHunk>
+
+    /**
+     * Записать разрешённый файл и отметить его разрешённым в индексе
+     * (`FR-23`): текст собран общим кодом из выборов пользователя.
+     */
+    suspend fun resolveConflict(path: String, resolvedText: String): CommitResult
+
+    /**
+     * Завершить слияние merge-коммитом после разрешения всех участков
+     * (`FR-24`, `TC-25`). Отказ — если неразрешённые участки остались.
+     */
+    suspend fun finishMerge(author: CommitAuthor): CommitResult
+
+    /**
+     * Отменить незавершённое слияние: репозиторий возвращается в состояние
+     * до pull, локальные коммиты целы (`FR-25`, `TC-26`).
+     */
+    suspend fun abortMerge(): CommitResult
+
+    /**
+     * Убрать stale-lock (`.git/index.lock`), оставшийся от убитого процесса,
+     * и сообщить, был ли он (`NFR-5`, `TC-32`).
+     *
+     * Отдельный метод, а не молчаливая уборка внутри операций: снятие чужого
+     * замка — действие с подтверждением пользователя, спека требует именно
+     * подтверждения, а не автоматики.
+     */
+    suspend fun clearStaleLock(): Boolean
+
+    /**
      * Отправить текущую ветку в origin (`FR-20`, `FR-21`).
      *
      * Единственный сетевой вызов после клона — по явному действию
@@ -112,6 +157,74 @@ sealed interface CommitResult {
     /** Коммит не создан; [error] уже содержит текст для пользователя. */
     data class Failed(val error: GitCommitError) : CommitResult
 }
+
+/** Чем закончился pull (`FR-14`: исход сообщается явно). */
+sealed interface PullResult {
+
+    /** Рабочая копия обновлена; [files] — что изменилось (для перечитки открытого файла). */
+    data class Updated(val files: List<String>) : PullResult
+
+    /** Расхождений не было — «уже актуально». */
+    data object AlreadyUpToDate : PullResult
+
+    /**
+     * Слияние остановилось на конфликте; [paths] — файлы с разметкой
+     * конфликта. Не ошибка: пользователь идёт на экран слияния (`UC-5`).
+     */
+    data class Conflicted(val paths: List<String>) : PullResult
+
+    /** Pull не прошёл; состояние репозитория не тронуто (`FR-16`), [error] несёт текст. */
+    data class Failed(val error: GitPullError) : PullResult
+}
+
+/** Почему pull не удался — классы отказов из `FR-16`. */
+enum class GitPullError {
+    /** Сети нет или remote недоступен. */
+    Network,
+
+    /** Remote потребовал авторизацию или отверг предъявленную. */
+    AuthRequired,
+
+    /** Локальные несохранённые изменения помешали слиянию. */
+    DirtyWorkTree,
+
+    /** Всё остальное: повреждённый ответ, отказ ввода-вывода, занятый индекс. */
+    PullFailed,
+    ;
+
+    fun userMessage(): String = when (this) {
+        Network ->
+            "Забрать правки не удалось: нет сети или сервер недоступен. Репозиторий не изменился."
+
+        AuthRequired ->
+            "Сервер отверг доступ. Проверьте авторизацию — репозиторий не изменился."
+
+        DirtyWorkTree ->
+            "Слиянию мешают незакоммиченные правки. Закоммитьте их и повторите — репозиторий не изменился."
+
+        PullFailed ->
+            "Забрать правки не удалось. Попробуйте ещё раз — репозиторий не изменился."
+    }
+}
+
+/**
+ * Конфликтный участок файла (`FR-23`).
+ *
+ * Модель платформенно-нейтральна: разметку конфликта разбирает общий код
+ * (`ConflictHunks.kt`), а не JGit, — так разбор и сборка результата
+ * проверяются без устройства (`NFR-10`).
+ *
+ * @property ours строки локальной версии (`ЛОКАЛЬНО · HEAD`)
+ * @property theirs строки удалённой версии (`ORIGIN/…`)
+ * @property oursLabel подпись стороны: автор и время; `null` — не разрешилось
+ * @property theirsLabel то же для удалённой стороны
+ */
+data class ConflictHunk(
+    val ours: List<String>,
+    val theirs: List<String>,
+    val oursLabel: String? = null,
+    val theirsLabel: String? = null,
+)
 
 /** Чем закончился push. */
 sealed interface PushResult {

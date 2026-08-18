@@ -67,8 +67,18 @@ fun RepositoryScreen(
     onOpenFile: (RepoFile) -> Unit,
     onCloneRequested: () -> Unit,
     onCommitRequested: () -> Unit,
+    beforePull: suspend () -> Boolean = { true },
+    onPulled: (List<String>) -> Unit = {},
+    onConflict: (List<String>) -> Unit = {},
 ) {
     LaunchedEffect(model) { model.start() }
+
+    // Конфликтный pull уводит на экран слияния (UC-5): решение принимает
+    // хостинг, модель лишь называет файлы.
+    val conflicts = model.conflictPaths
+    LaunchedEffect(conflicts) {
+        if (conflicts.isNotEmpty()) onConflict(conflicts)
+    }
 
     Surface(color = AdocTheme.colors.ground, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -90,6 +100,9 @@ fun RepositoryScreen(
                     RepositoryAppBar(title = state.repository.directoryName)
                     ChromeDivider()
                     model.pushFailure?.let { failure -> PushFailureBanner(text = failure) }
+                    // Исход pull сообщается явно (FR-14): обновлено, уже
+                    // актуально, конфликт или текст отказа.
+                    model.pullNotice?.let { notice -> PushFailureBanner(text = notice) }
                     BranchCard(
                         repository = state.repository,
                         status = state.status,
@@ -110,7 +123,12 @@ fun RepositoryScreen(
                             )
                         }
                     }
-                    ActionBar(changeCount = state.status.changeCount, onCommit = onCommitRequested)
+                    ActionBar(
+                        changeCount = state.status.changeCount,
+                        pulling = model.pulling,
+                        onPull = { model.pullRequested(beforePull = beforePull, onPulled = onPulled) },
+                        onCommit = onCommitRequested,
+                    )
                 }
             }
         }
@@ -369,18 +387,38 @@ private fun FileRow(
 }
 
 /**
- * Панель действий макета «01» в объёме E2: первичная `COMMIT · N`.
- * `PULL` приходит с E3, `+` (новый файл) — за пределами итерации;
- * рисовать их мёртвыми — врать о возможностях, отступление названо в журнале.
+ * Панель действий макета «01»: вторичная `PULL` (`FR-13`) и первичная
+ * `COMMIT · N`. Кнопка `+` (новый файл) — за пределами итерации: рисовать её
+ * мёртвой значило бы врать о возможностях, отступление названо в журнале.
  */
 @Composable
-private fun ActionBar(changeCount: Int, onCommit: () -> Unit) {
+private fun ActionBar(
+    changeCount: Int,
+    pulling: Boolean,
+    onPull: () -> Unit,
+    onCommit: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(AdocTheme.colors.chrome)
             .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(46.dp)
+                .border(1.dp, AdocTheme.colors.borderObject)
+                .clickable(enabled = !pulling, role = Role.Button, onClick = onPull),
+        ) {
+            Text(
+                text = if (pulling) "ЗАБИРАЮ…" else "PULL",
+                style = adocTextStyle(AdocTypography.buttonLabel),
+                color = if (pulling) AdocTheme.colors.textFaint else AdocTheme.colors.textSecondary,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
         Box(
             modifier = Modifier
                 .weight(1f)

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.olegnyr.adocmobile.git.FileStatus
 import io.github.olegnyr.adocmobile.git.GitSync
+import io.github.olegnyr.adocmobile.git.PullResult
 import io.github.olegnyr.adocmobile.git.PushResult
 import io.github.olegnyr.adocmobile.git.RepoFile
 import io.github.olegnyr.adocmobile.git.RepoStatus
@@ -136,6 +137,92 @@ class RepositoryScreenModel(
     }
 
     /**
+     * Результат последнего pull для строки состояния (`FR-14`): «обновлено»,
+     * «уже актуально» или текст отказа. `null` — pull ещё не запускали.
+     */
+    var pullNotice: String? by mutableStateOf(null)
+        private set
+
+    /** Идёт ли pull — кнопка на это время недоступна (`NFR-1`). */
+    var pulling: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Конфликтные файлы последнего pull; непустой список — хостинг ведёт на
+     * экран слияния (`UC-5`). Гасится завершением или отменой слияния.
+     */
+    var conflictPaths: List<String> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * Кнопка `PULL` экрана репозитория (`FR-13`).
+     *
+     * Единственное сетевое обращение чтения — fetch отдельной кнопкой не
+     * существует (решение OQ-5). Исход сообщается явно (`FR-14`): обновление
+     * перечитывает состояние и зовёт [onPulled] со списком изменённых файлов
+     * (перечитка открытого документа, `FR-15`); конфликт поднимает
+     * [conflictPaths]; отказ — текст, состояние репозитория не тронуто
+     * (`FR-16`).
+     *
+     * Перед сетью — [beforePull]: хостинг успевает сохранить несохранённые
+     * правки открытого документа тем же механизмом немедленной записи, что
+     * «Поделиться» и «Назад» (решение OQ-4). Отказ записи отменяет pull:
+     * лучше не тронуть репозиторий, чем слить поверх потерянной правки.
+     *
+     * @param beforePull подготовка перед сетью; `false` — pull отменён
+     * @param onPulled пути, изменённые pull-ом
+     */
+    fun pullRequested(
+        beforePull: suspend () -> Boolean = { true },
+        onPulled: (List<String>) -> Unit = {},
+    ) {
+        if (pulling) return
+        pulling = true
+        pullNotice = null
+        scope.launch {
+            try {
+                if (!beforePull()) {
+                    pullNotice = PULL_CANCELLED_MESSAGE
+                    return@launch
+                }
+                when (val result = sync.pull()) {
+                    is PullResult.Updated -> {
+                        pullNotice = PULL_UPDATED_MESSAGE
+                        conflictPaths = emptyList()
+                        start()
+                        onPulled(result.files)
+                    }
+
+                    is PullResult.AlreadyUpToDate -> {
+                        pullNotice = PULL_UP_TO_DATE_MESSAGE
+                        conflictPaths = emptyList()
+                    }
+
+                    is PullResult.Conflicted -> {
+                        pullNotice = PULL_CONFLICT_MESSAGE
+                        conflictPaths = result.paths
+                        start()
+                    }
+
+                    is PullResult.Failed -> {
+                        pullNotice = result.error.userMessage()
+                        conflictPaths = emptyList()
+                    }
+                }
+            } finally {
+                pulling = false
+            }
+        }
+    }
+
+    /** Слияние закрыто (завершено или отменено) — снять состояние конфликта и перечитать. */
+    fun mergeFinished() {
+        conflictPaths = emptyList()
+        pullNotice = null
+        start()
+    }
+
+    /**
      * Кнопка `PUSH ↑N` на карточке — путь повтора после отказа (`FR-21`,
      * находка A ревью E2: текст отказа велит «отправьте снова», и этой
      * возможности не существовало). Успех перечитывает состояние — `↑`
@@ -199,6 +286,11 @@ class RepositoryScreenModel(
     private companion object {
         const val READ_FAILED_MESSAGE =
             "Не удалось прочитать репозиторий с устройства. Попробуйте ещё раз."
+        const val PULL_UPDATED_MESSAGE = "Обновлено: правки из origin забраны."
+        const val PULL_UP_TO_DATE_MESSAGE = "Уже актуально: новых правок в origin нет."
+        const val PULL_CONFLICT_MESSAGE = "Конфликт слияния: нужно выбрать версии участков."
+        const val PULL_CANCELLED_MESSAGE =
+            "Забирать правки не стали: сначала сохраните изменения открытого документа."
     }
 }
 

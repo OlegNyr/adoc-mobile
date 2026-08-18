@@ -102,6 +102,60 @@ class FakeGitSync : GitSync {
         return commitResult
     }
 
+    /** Ответ [pull]; число вызовов — [pullCount]. */
+    var pullResult: PullResult = PullResult.AlreadyUpToDate
+    var pullCount: Int = 0
+        private set
+
+    /** Ворота перед ответом [pull] — для наблюдения промежуточных фаз модели. */
+    var beforePull: (suspend () -> Unit)? = null
+
+    override suspend fun pull(): PullResult {
+        beforePull?.invoke()
+        pullCount += 1
+        return pullResult
+    }
+
+    /** Участки конфликта по путям — ответ [conflictHunks]. */
+    var hunks: Map<String, List<ConflictHunk>> = emptyMap()
+
+    override suspend fun conflictHunks(path: String): List<ConflictHunk> = hunks[path].orEmpty()
+
+    /** Разрешённые файлы: путь → записанный текст. */
+    val resolved = mutableMapOf<String, String>()
+    var resolveResult: CommitResult = CommitResult.Committed
+
+    override suspend fun resolveConflict(path: String, resolvedText: String): CommitResult {
+        if (resolveResult is CommitResult.Committed) resolved[path] = resolvedText
+        return resolveResult
+    }
+
+    /** Исходы завершения и отмены слияния; счётчики вызовов — для проверки FR-24/FR-25. */
+    var finishResult: CommitResult = CommitResult.Committed
+    var finishCount: Int = 0
+        private set
+    var abortCount: Int = 0
+        private set
+
+    override suspend fun finishMerge(author: CommitAuthor): CommitResult {
+        finishCount += 1
+        return finishResult
+    }
+
+    override suspend fun abortMerge(): CommitResult {
+        abortCount += 1
+        return CommitResult.Committed
+    }
+
+    /** Ответ [clearStaleLock]: был ли замок. */
+    var staleLock: Boolean = false
+
+    override suspend fun clearStaleLock(): Boolean {
+        val had = staleLock
+        staleLock = false
+        return had
+    }
+
     /** Ответ [push]; число вызовов — [pushCount]. */
     var pushResult: PushResult = PushResult.Pushed
     var pushCount: Int = 0

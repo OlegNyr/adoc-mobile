@@ -10,6 +10,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -171,6 +173,110 @@ class RepositoryScreenModelTest {
             it.start()
             assertIs<RepositoryScreenState.Ready>(it.state)
         }
+    }
+
+    @Test
+    fun TC_11_pullReportsUpdatedAndHandsChangedFilesToHost() {
+        sync.repository = snapshot
+        sync.pullResult = io.github.olegnyr.adocmobile.git.PullResult.Updated(listOf("docs/guide.adoc", "readme.adoc"))
+        val model = RepositoryScreenModel(sync = sync, scope = scope)
+        model.start()
+
+        var reread: List<String>? = null
+        model.pullRequested(onPulled = { reread = it })
+
+        assertEquals("Обновлено: правки из origin забраны.", model.pullNotice, "исход сообщён явно (FR-14)")
+        assertEquals(
+            listOf("docs/guide.adoc", "readme.adoc"),
+            reread,
+            "изменённые файлы уходят хостингу для перечитки открытого документа (FR-15)",
+        )
+        assertEquals(emptyList(), model.conflictPaths)
+        assertEquals(1, sync.pullCount)
+    }
+
+    @Test
+    fun TC_12_pullWithoutDivergenceReportsAlreadyUpToDateAndTouchesNothing() {
+        sync.repository = snapshot
+        sync.pullResult = io.github.olegnyr.adocmobile.git.PullResult.AlreadyUpToDate
+        val model = RepositoryScreenModel(sync = sync, scope = scope)
+        model.start()
+
+        var rereadCalls = 0
+        model.pullRequested(onPulled = { rereadCalls += 1 })
+
+        assertEquals("Уже актуально: новых правок в origin нет.", model.pullNotice, "TC-12")
+        assertEquals(0, rereadCalls, "перечитывать нечего — сигнала хостингу нет")
+        assertEquals(emptyList(), model.conflictPaths)
+    }
+
+    @Test
+    fun TC_14_pullFailureKeepsStateAndExplainsItself() {
+        sync.repository = snapshot
+        sync.pullResult = io.github.olegnyr.adocmobile.git.PullResult.Failed(io.github.olegnyr.adocmobile.git.GitPullError.Network)
+        val model = RepositoryScreenModel(sync = sync, scope = scope)
+        model.start()
+        val stateBefore = model.state
+
+        model.pullRequested()
+
+        assertEquals(
+            io.github.olegnyr.adocmobile.git.GitPullError.Network.userMessage(),
+            model.pullNotice,
+            "отказ объясняется текстом (FR-16, TC-14)",
+        )
+        assertSame(stateBefore, model.state, "состояние репозитория не тронуто отказом")
+        assertEquals(emptyList(), model.conflictPaths)
+    }
+
+    @Test
+    fun TC_21_conflictedPullRaisesConflictPathsForMergeScreen() {
+        sync.repository = snapshot
+        sync.pullResult = io.github.olegnyr.adocmobile.git.PullResult.Conflicted(listOf("docs/vision.adoc"))
+        val model = RepositoryScreenModel(sync = sync, scope = scope)
+        model.start()
+
+        model.pullRequested()
+
+        assertEquals(listOf("docs/vision.adoc"), model.conflictPaths, "конфликт ведёт на экран слияния (UC-5)")
+        assertEquals("Конфликт слияния: нужно выбрать версии участков.", model.pullNotice)
+
+        model.mergeFinished()
+        assertEquals(emptyList(), model.conflictPaths, "закрытое слияние снимает состояние конфликта")
+        assertEquals(null, model.pullNotice)
+    }
+
+    @Test
+    fun TC_13_pullIsCancelledWhenUnsavedChangesCannotBeStored() {
+        sync.repository = snapshot
+        sync.pullResult = io.github.olegnyr.adocmobile.git.PullResult.Updated(listOf("readme.adoc"))
+        val model = RepositoryScreenModel(sync = sync, scope = scope)
+        model.start()
+
+        // Хостинг не смог сохранить открытый документ (отказ записи) —
+        // решение OQ-4: правку не теряем, сеть не трогаем.
+        model.pullRequested(beforePull = { false })
+
+        assertEquals(0, sync.pullCount, "pull не запускался (OQ-4, FR-15)")
+        assertTrue(model.pullNotice!!.contains("сохраните"), "пользователю объяснено, почему pull не пошёл")
+    }
+
+    @Test
+    fun TC_11_secondPullDuringOperationIsBlockedByState() {
+        sync.repository = snapshot
+        sync.pullResult = io.github.olegnyr.adocmobile.git.PullResult.AlreadyUpToDate
+        val gate = kotlinx.coroutines.channels.Channel<Unit>()
+        sync.beforePull = { gate.receive() }
+        val model = RepositoryScreenModel(sync = sync, scope = scope)
+        model.start()
+
+        model.pullRequested()
+        assertTrue(model.pulling, "операция идёт — состояние занято")
+        model.pullRequested()
+
+        assertTrue(gate.trySend(Unit).isSuccess)
+        assertEquals(1, sync.pullCount, "одна операция за раз (NFR-1, приём TC-34)")
+        assertFalse(model.pulling)
     }
 
     @Test

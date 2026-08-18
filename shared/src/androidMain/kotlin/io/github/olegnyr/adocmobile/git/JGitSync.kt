@@ -22,14 +22,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.api.errors.CheckoutConflictException
 import org.eclipse.jgit.api.errors.InvalidRemoteException
 import org.eclipse.jgit.api.errors.TransportException
 import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.errors.LockFailedException
 import org.eclipse.jgit.errors.NotSupportedException
 import org.eclipse.jgit.lib.BranchTrackingStatus
+import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.ProgressMonitor
 import org.eclipse.jgit.patch.FileHeader.PatchType
+import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
@@ -307,10 +311,184 @@ class JGitSync(
                 CommitResult.Committed
             }
         } catch (e: Exception) {
-            val locked = generateSequence<Throwable>(e) { it.cause }
-                .any { it is LockFailedException }
-            CommitResult.Failed(if (locked) GitCommitError.IndexLocked else GitCommitError.CommitFailed)
+            CommitResult.Failed(commitErrorOf(e))
         }
+    }
+
+    /**
+     * Pull: fetch + merge текущей ветки (`FR-13`, `FR-14`, `FR-16`).
+     *
+     * Исход конфликта — не исключение, а [PullResult.Conflicted]: слияние
+     * остановлено, файлы с разметкой уходят на экран `UC-5`. Отказ не меняет
+     * состояния репозитория (`TC-14`): при неуспешном fetch/merge JGit не
+     * трогает рабочую копию, а стратегия остаётся дефолтной — своего слияния
+     * мы не изобретаем.
+     *
+     * Список изменённых файлов для перечитки открытого документа (`FR-15`)
+     * считается диффом «HEAD до» против «HEAD после» — так узнаётся ровно то,
+     * что принёс pull, а не всё, что лежит в копии.
+     */
+    override suspend fun pull(): PullResult = withContext(io) {
+        val dir = firstRepositoryDir() ?: return@withContext PullResult.Failed(GitPullError.PullFailed)
+        try {
+            Git.open(dir).use { git ->
+                val before = git.repository.resolve(HEAD)
+                val result = runInterruptible {
+                    git.pull()
+                        .apply {
+                            val origin = git.repository.config.getString("remote", ORIGIN, "url").orEmpty()
+                            storedCredentials(origin)?.let { setCredentialsProvider(it) }
+                        }
+                        .call()
+                }
+
+                val conflicting = result.mergeResult?.conflicts?.keys.orEmpty().toList().sorted()
+                when {
+                    conflicting.isNotEmpty() -> PullResult.Conflicted(conflicting)
+
+                    !result.isSuccessful -> PullResult.Failed(GitPullError.PullFailed)
+
+                    else -> {
+                        val after = git.repository.resolve(HEAD)
+                        if (before == after) {
+                            PullResult.AlreadyUpToDate
+                        } else {
+                            PullResult.Updated(changedPathsBetween(git, before, after))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            PullResult.Failed(
+                when (errorOf(e)) {
+                    GitSyncError.Network -> GitPullError.Network
+                    GitSyncError.AuthRequired -> GitPullError.AuthRequired
+                    else -> {
+                        val dirty = generateSequence<Throwable>(e) { it.cause }
+                            .any { it is CheckoutConflictException }
+                        if (dirty) GitPullError.DirtyWorkTree else GitPullError.PullFailed
+                    }
+                },
+            )
+        }
+    }
+
+    /** Участки конфликта файла (`FR-23`): читаем текст, разбирает общий код. */
+    override suspend fun conflictHunks(path: String): List<ConflictHunk> = withContext(io) {
+        val dir = firstRepositoryDir() ?: return@withContext emptyList()
+        val file = File(dir, path)
+        if (!file.isFile) return@withContext emptyList()
+        parseConflictFile(file.readText()).hunks
+    }
+
+    /** Записать разрешённый текст и снять конфликт с файла в индексе (`FR-23`). */
+    override suspend fun resolveConflict(path: String, resolvedText: String): CommitResult =
+        withContext(io) {
+            val dir = firstRepositoryDir()
+                ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+            try {
+                Git.open(dir).use { git ->
+                    // Перевод строки в конце: файл без него Git считает
+                    // изменённым при каждом сравнении.
+                    val text = if (resolvedText.endsWith("\n")) resolvedText else resolvedText + "\n"
+                    File(dir, path).writeText(text)
+                    // add снимает пометку конфликта — это и есть `git add`
+                    // при разрешении: стадии заменяются одной записью.
+                    git.add().addFilepattern(path).call()
+                    CommitResult.Committed
+                }
+            } catch (e: Exception) {
+                CommitResult.Failed(commitErrorOf(e))
+            }
+        }
+
+    /**
+     * Merge-коммит после разрешения всех участков (`FR-24`, `TC-25`).
+     * Неразрешённые участки — отказ: конфликтный индекс не коммитится, и
+     * подменять эту проверку своей незачем.
+     */
+    override suspend fun finishMerge(author: CommitAuthor): CommitResult = withContext(io) {
+        val dir = firstRepositoryDir()
+            ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+        try {
+            Git.open(dir).use { git ->
+                if (git.status().call().conflicting.isNotEmpty()) {
+                    return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+                }
+                git.commit()
+                    .setAuthor(author.name, author.email)
+                    .setCommitter(author.name, author.email)
+                    .setSign(false)
+                    .call()
+                CommitResult.Committed
+            }
+        } catch (e: Exception) {
+            CommitResult.Failed(commitErrorOf(e))
+        }
+    }
+
+    /**
+     * Отмена слияния (`FR-25`, `TC-26`): рабочая копия и индекс возвращаются
+     * к состоянию до pull. `reset --hard HEAD` — то же, что делает
+     * `git merge --abort` для остановленного merge: HEAD не двигался, значит
+     * локальные коммиты целы.
+     */
+    override suspend fun abortMerge(): CommitResult = withContext(io) {
+        val dir = firstRepositoryDir()
+            ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+        try {
+            Git.open(dir).use { git ->
+                git.repository.writeMergeHeads(null)
+                git.repository.writeMergeCommitMsg(null)
+                git.reset().setMode(ResetCommand.ResetType.HARD).setRef(HEAD).call()
+                CommitResult.Committed
+            }
+        } catch (e: Exception) {
+            CommitResult.Failed(commitErrorOf(e))
+        }
+    }
+
+    /**
+     * Снять stale-lock (`NFR-5`, `TC-32`).
+     *
+     * Спайк E0 показал: после смерти процесса `.git/index.lock` остаётся, и
+     * следующая операция падает с `LockFailedException`; лечение — удалить
+     * файл и повторить. Метод отдельный и зовётся по подтверждению
+     * пользователя: снимать чужой замок молча нельзя — процесс мог быть жив.
+     */
+    override suspend fun clearStaleLock(): Boolean = withContext(io) {
+        val dir = firstRepositoryDir() ?: return@withContext false
+        val lock = File(File(dir, GIT_DIR), "index.lock")
+        lock.isFile && lock.delete()
+    }
+
+    /** Пути, изменившиеся между двумя состояниями HEAD (`FR-15`). */
+    private fun changedPathsBetween(git: Git, before: ObjectId?, after: ObjectId?): List<String> {
+        if (before == null || after == null) return emptyList()
+        val repo = git.repository
+        return try {
+            repo.newObjectReader().use { reader ->
+                val oldTree = CanonicalTreeParser().apply {
+                    reset(reader, RevWalk(repo).use { it.parseCommit(before).tree })
+                }
+                val newTree = CanonicalTreeParser().apply {
+                    reset(reader, RevWalk(repo).use { it.parseCommit(after).tree })
+                }
+                git.diff().setOldTree(oldTree).setNewTree(newTree).call()
+                    .map { entry -> entry.newPath.takeIf { it != DEV_NULL } ?: entry.oldPath }
+                    .distinct()
+                    .sorted()
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Классы отказов коммита — общий разбор для commit, resolve и merge. */
+    private fun commitErrorOf(e: Exception): GitCommitError {
+        val locked = generateSequence<Throwable>(e) { it.cause }.any { it is LockFailedException }
+        return if (locked) GitCommitError.IndexLocked else GitCommitError.CommitFailed
     }
 
     /**
@@ -515,6 +693,7 @@ class JGitSync(
         const val DEV_NULL = "/dev/null"
         const val USER_SECTION = "user"
         const val ORIGIN = "origin"
+        const val HEAD = "HEAD"
     }
 }
 
