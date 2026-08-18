@@ -39,6 +39,10 @@ xref:adr/adr-004-document-size-limit.adoc[ADR-004] — заявленный ра
 xref:adr/adr-005-asciidoctor-core-version.adoc[ADR-005] — остаёмся на Asciidoctor.js 4.0.9, два дефекта заведены в апстрим и не обходятся.
 xref:adr/adr-006-instrumented-tests.adoc[ADR-006] — тесты с живым движком и композицией идут инструментальным прогоном на устройстве.
 xref:adr/adr-007-ssh-transport.adoc[ADR-007] — SSH-транспорт Git: MINA sshd вместо брошенного JSch.
+xref:adr/adr-008-kroki-extension-bundle.adoc[ADR-008] — расширение Kroki кладётся в бандл вторым самодостаточным скриптом.
+xref:adr/adr-009-diagram-delivery.adoc[ADR-009] — диаграммы разрешаются в общем коде, `WebView` в сеть не ходит.
+xref:adr/adr-010-diagram-cache.adoc[ADR-010] — кэш диаграмм: файлы в приватном каталоге, ключ по адресу.
+xref:adr/adr-011-diagram-degradation.adoc[ADR-011] — отказ диаграммы деградирует в блок кода с пометкой.
 Проектные решения лежат в `adr/`; решения уровня отдельной фичи — в её каталоге `doc/features/NNN-<slug>/adr/`.
 
 xref:development-rules.adoc[Правила разработки]::
