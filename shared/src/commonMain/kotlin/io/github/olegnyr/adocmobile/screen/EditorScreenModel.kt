@@ -95,6 +95,10 @@ const val EDITOR_MODIFIED_LABEL: String = "ИЗМЕНЁН · НЕ СОХРАНЁ
  *
  * @param scope область корутин экрана: её отмена снимает и открытие, и
  * автосохранение всех документов
+ * @param onDocumentClosed документ закрыт («назад», `FR-21`) или не открылся;
+ * аргумент — текст отказа открытия либо `null`. Через него хостинг навигации
+ * (фича 009) возвращает пользователя на корневой список. Умолчание — пустой
+ * обработчик: без хостинга экран ведёт себя как прежде.
  * @param clock источник времени в миллисекундах эпохи Unix
  * @param delayUntil ожидание до срока — параметр ради тестов, умолчание — [delay]
  */
@@ -108,6 +112,7 @@ class EditorScreenModel(
     private val delayUntil: suspend (dueAt: Long) -> Unit = { dueAt ->
         delay((dueAt - clock()).coerceAtLeast(0))
     },
+    private val onDocumentClosed: (notice: String?) -> Unit = {},
 ) {
 
     /** Что показывать: наблюдаемое состояние для композиции. */
@@ -170,10 +175,7 @@ class EditorScreenModel(
      * туда уже не пройдёт (правило «ровно одно право», журнал 004 `SL-7`).
      */
     fun folderChosen() {
-        documentScope?.cancel()
-        documentScope = null
-        writeFailure = null
-        scope.launch { browseHeldTree() }
+        leaveDocument()
     }
 
     /**
@@ -191,7 +193,7 @@ class EditorScreenModel(
                 is DocumentOpenResult.Opened -> attach(result.document, keepField)
                 is DocumentOpenResult.Failed -> {
                     if (document !is EditorDocument.Open) {
-                        browseHeldTree(notice = result.error.userMessage(source.displayName))
+                        leaveDocument(result.error.userMessage(source.displayName))
                     }
                 }
             }
@@ -367,10 +369,30 @@ class EditorScreenModel(
      * закрытие случается только после успешной записи, отказу гореть не над чем.
      */
     private fun closeToFolder() {
+        leaveDocument()
+    }
+
+    /**
+     * Единственный выход из открытого документа (`FR-4`, `FR-5` фичи 009).
+     *
+     * Через него идут *все* пути: «назад» кнопкой и жестом, отказ открытия и
+     * смена папки из меню. Так и задумано: пока веток было три, одна из них
+     * (`folderChosen`) молчала — навигатор продолжал считать, что документ
+     * открыт, тело экрана при хостинге не рисовалось, перехват «назад» был
+     * выключен, и пользователь оставался на пустом экране без единого выхода
+     * (находка ревью `SL-2`). Одна ветка — одно место, где об этом можно
+     * забыть, и оно закрыто тестом.
+     *
+     * @param notice текст отказа открытия либо `null` — обычное закрытие
+     */
+    private fun leaveDocument(notice: String? = null) {
         documentScope?.cancel()
         documentScope = null
         writeFailure = null
-        scope.launch { browseHeldTree() }
+        // Сигнал уходит до перечитывания папки: список внутри редактора —
+        // наследство, уходящее слайсом `SL-2b`, и ждать его хостингу незачем.
+        onDocumentClosed(notice)
+        scope.launch { browseHeldTree(notice) }
     }
 
     /** Приложение на переднем плане — для записи при уходе в фон. */

@@ -26,7 +26,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.olegnyr.adocmobile.document.AndroidDocumentTreeAccess
 import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.render.installAdocRenderer
-import io.github.olegnyr.adocmobile.screen.EditorScreen
+import io.github.olegnyr.adocmobile.screen.app.AdocApp
+import io.github.olegnyr.adocmobile.document.DocumentSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,10 +59,9 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            // Экран редактора (T-051, фича 005) — единственный экран приложения;
-            // временные поверхности удалены слайсом SL-4, их проверочные
-            // возможности несут debug-хуки выше и меню документа на экране.
-            EditorScreenHost()
+            // Корень приложения — список файлов источника (ADR-003, FR-1
+            // фичи 009); редактор стал экраном второго уровня.
+            AdocAppHost()
         }
     }
 
@@ -95,18 +95,16 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Хостинг экрана редактора: всё, что нельзя унести в `commonMain`, — системный
- * диалог выбора папки и платформенная реализация tree-доступа.
+ * Платформенная половина приложения: всё, чего нет в `commonMain`.
  *
- * Диалог отдан экрану suspend-функцией: экран просит папку, платформа
- * показывает `ACTION_OPEN_DOCUMENT_TREE`, берёт постоянное право на дерево
- * (правило «ровно одно право» — внутри шва) и возвращает [TreeSource].
- * Файл дальше выбирается без платформы — из списка документов папки
- * (решение `OQ-1` фичи 005); прежний путь одиночного файла из хоста ушёл,
- * как и помечено в `FR-1` фичи 004.
+ * Здесь остались ровно три вещи — системный диалог выбора папки, признак
+ * переднего плана и `ACTION_SEND`. Навигация, корневой список и экран
+ * документа живут в [AdocApp]: перехват «назад» обязан быть свойством стека,
+ * а стек — общий код, и держать хостинг порознь с ним значило снова получить
+ * экран без выхода (находка ревью `SL-2`, третий рецидив).
  */
 @Composable
-private fun EditorScreenHost() {
+private fun AdocAppHost() {
     val context = LocalContext.current
     val access = remember { AndroidDocumentTreeAccess(context) }
     val scope = rememberCoroutineScope()
@@ -114,17 +112,27 @@ private fun EditorScreenHost() {
     // Мост «callback диалога → suspend»: экран ждёт CompletableDeferred,
     // callback его завершает. Отмена диалога пользователем — честный null.
     var pending by remember { mutableStateOf<CompletableDeferred<TreeSource?>?>(null) }
+
+    // Папка, право на которую взято без ждущего запроса: активность
+    // пересоздали, пока был открыт системный диалог, и `pending` не пережил
+    // пересоздание. Прежде результат в этом случае молча выбрасывался — право
+    // не бралось, папка не менялась, и пользователь видел прежний список
+    // (находка ревью `SL-2`). Ждущая корутина не воскресает, а вот право взять
+    // обязаны: оно и есть результат, за которым ходили.
+    var takenWithoutRequest by remember { mutableStateOf<TreeSource?>(null) }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val request = pending ?: return@rememberLauncherForActivityResult
+        val request = pending
         pending = null
         if (uri == null) {
-            request.complete(null)
-        } else {
-            scope.launch {
-                // Взятие разрешения и запрос имени папки ходят к провайдеру,
-                // то есть это ввод-вывод — на главном потоке ему делать нечего.
-                request.complete(withContext(Dispatchers.IO) { access.takePersistableTreeAccess(uri) })
-            }
+            request?.complete(null)
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            // Взятие разрешения и запрос имени папки ходят к провайдеру,
+            // то есть это ввод-вывод — на главном потоке ему делать нечего.
+            val source = withContext(Dispatchers.IO) { access.takePersistableTreeAccess(uri) }
+            if (request != null) request.complete(source) else takenWithoutRequest = source
         }
     }
 
@@ -146,7 +154,7 @@ private fun EditorScreenHost() {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    EditorScreen(
+    AdocApp(
         access = access,
         requestFolder = {
             val request = CompletableDeferred<TreeSource?>()
@@ -159,25 +167,31 @@ private fun EditorScreenHost() {
         // Картинки рядом с документом в превью (TC-34 фичи 003): байты достаёт
         // та же платформенная половина tree-доступа, что читает документы.
         imageSource = remember(access) { access.imageSource() },
-        // «Поделиться» (FR-20 фичи 005): системная отправка исходного файла.
-        // Экран уже дождался записи несохранённых правок — здесь остаётся
-        // ровно intent. SAF-URI документа отдаётся напрямую в EXTRA_STREAM,
-        // без своего FileProvider: право на дерево удерживается приложением,
-        // а получателю чтение выдаёт флаг. ClipData дублирует EXTRA_STREAM
-        // намеренно: флаг чтения система переносит получателю по ClipData, а
-        // миграция migrateExtraStreamToClipData — деталь реализации платформы,
-        // не контракт.
-        shareDocument = { source ->
-            val uri = Uri.parse(source.id)
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                clipData = ClipData.newRawUri(source.displayName, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            // Заголовок диалога null: системный выбор получателя подписывает
-            // себя сам, а строка «Поделиться» уже была пунктом меню.
-            context.startActivity(Intent.createChooser(send, null))
-        },
+        shareDocument = { document -> context.shareDocument(document) },
+        sourceTakenOutOfBand = takenWithoutRequest,
+        onSourceTakenConsumed = { takenWithoutRequest = null },
     )
+}
+
+/**
+ * Системная отправка документа (`FR-20` фичи 005).
+ *
+ * Экран уже дождался записи несохранённых правок — здесь остаётся ровно
+ * intent. SAF-URI документа отдаётся напрямую в `EXTRA_STREAM`, без своего
+ * `FileProvider`: право на дерево удерживается приложением, а получателю
+ * чтение выдаёт флаг. `ClipData` дублирует `EXTRA_STREAM` намеренно: флаг
+ * чтения система переносит получателю по `ClipData`, а миграция
+ * `migrateExtraStreamToClipData` — деталь реализации платформы, не контракт.
+ */
+private fun android.content.Context.shareDocument(source: DocumentSource) {
+    val uri = Uri.parse(source.id)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        clipData = ClipData.newRawUri(source.displayName, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    // Заголовок диалога null: системный выбор получателя подписывает себя сам,
+    // а строка «Поделиться» уже была пунктом меню.
+    startActivity(Intent.createChooser(send, null))
 }

@@ -141,6 +141,14 @@ internal fun editorTabAfter(document: EditorDocument, selected: EditorTab): Edit
  * @param shareDocument системная отправка документа (`FR-20`): экран объявляет
  * намерение источником уже записанного файла, платформа показывает диалог
  * `ACTION_SEND` — тем же разделением, что у [requestFolder].
+ * @param openSource документ, который просит открыть хостинг навигации
+ * (`FR-1` фичи 009). `null` — прежнее поведение: экран сам поднимает
+ * удержанный источник и сам показывает список папки.
+ * Строительные леса на время слайса `SL-2` фичи 009: список уходит из этого
+ * экрана в корень, и с `SL-2b` останется только ветка хостинга.
+ * @param onDocumentClosed документ закрыт («назад», `FR-21`) или не открылся;
+ * аргумент — текст отказа открытия (`FR-9`) либо `null`. Хостинг возвращается
+ * на корневой список и показывает текст там.
  */
 @Composable
 fun EditorScreen(
@@ -150,6 +158,8 @@ fun EditorScreen(
     foreground: Boolean = true,
     imageSource: PreviewImageSource? = null,
     shareDocument: (DocumentSource) -> Unit = {},
+    openSource: DocumentSource? = null,
+    onDocumentClosed: (notice: String?) -> Unit = {},
 ) {
     AdocTheme {
         Surface(
@@ -164,6 +174,7 @@ fun EditorScreen(
                 EditorScreenModel(
                     editor = editor,
                     access = access,
+                    onDocumentClosed = onDocumentClosed,
                     // Движок-синглтон процесса (FR-3 фичи 003): пайплайну
                     // достаётся контракт, а не платформа.
                     renderer = adocRenderer(),
@@ -183,7 +194,15 @@ fun EditorScreen(
             // модели: любой путь к списку (закрытие, смена папки) его ставит,
             // открытие документа — снимает.
             var viewingList by rememberSaveable { mutableStateOf(false) }
-            LaunchedEffect(model) { model.start(fieldSourceId, liftHeldSource = !viewingList) }
+            LaunchedEffect(model, openSource) {
+                if (openSource != null) {
+                    // Хостинг сам решил, что открыто: своего подъёма и своего
+                    // списка экран в этом режиме не заводит.
+                    model.open(openSource, keepField = openSource.id == fieldSourceId)
+                } else {
+                    model.start(fieldSourceId, liftHeldSource = !viewingList)
+                }
+            }
 
             // Выбранная вкладка объявлена до подписки на состояние: закрытие
             // документа её сбрасывает (FR-22), и эффекту нужен доступ к ней.
@@ -204,6 +223,12 @@ fun EditorScreen(
             // в app bar (FR-21): перехват только при открытом документе; со
             // списка «назад» не перехватывается — приложение сворачивается
             // платформенным поведением, включая анимацию predictive back.
+            // Перехват только при открытом документе — и только потому, что
+            // здесь у «назад» есть своя работа: немедленная запись перед
+            // закрытием (`FR-21`). Все прочие состояния держит перехват уровня
+            // приложения по признаку стека (`AdocApp`); оба обработчика одного
+            // API, и вложенный выигрывает, поэтому пока документ открыт
+            // побеждает этот.
             BackHandler(enabled = document is EditorDocument.Open) { model.closeRequested() }
 
             // Каждое изменение текста — в модель (FR-10). Подписка через
@@ -280,6 +305,10 @@ fun EditorScreen(
                     EditorAppBar(
                         document = document,
                         editor = editor,
+                        // Имя показывается, только пока документ открывается
+                        // хостингом: без хостинга состояния без документа
+                        // рисуют себя сами и в подписи не нуждаются.
+                        openingName = openSource?.displayName,
                         retryWriteVisible = model.writeFailure != null,
                         onBack = model::closeRequested,
                         onUndo = model::undoRequested,
@@ -350,23 +379,43 @@ fun EditorScreen(
                             )
                         }
 
-                        EditorDocument.NoFolder -> EmptyState(
-                            label = "ПАПКА НЕ ВЫБРАНА",
-                            message = "Выберите папку с документами AsciiDoc, чтобы начать работу.",
-                            onOpenFolder = openFolder,
-                        )
+                        // Состояния без документа — наследство: список папки
+                        // жил внутри редактора, пока корня не существовало.
+                        // При хостинге навигации (`openSource != null`) они не
+                        // рисуются вовсе: список в приложении один (`FR-14`
+                        // фичи 009, ADR-013), и мелькнуть вторым нельзя — ни
+                        // кадром до открытия, ни кадром после закрытия, пока
+                        // хостинг уводит на корень. Ветки уходят целиком
+                        // слайсом `SL-2b`.
+                        //
+                        // Вместо них при хостинге — имя открываемого файла в
+                        // шапке: чтение через SAF занимает заметное время, и
+                        // пустой экран без единой подписи читается как сбой.
+                        // У корня состояние загрузки есть, у документа не было
+                        // (замечание ревью `SL-2`).
+                        EditorDocument.NoFolder -> if (openSource == null) {
+                            EmptyState(
+                                label = "ПАПКА НЕ ВЫБРАНА",
+                                message = "Выберите папку с документами AsciiDoc, чтобы начать работу.",
+                                onOpenFolder = openFolder,
+                            )
+                        }
 
-                        is EditorDocument.FolderFailed -> EmptyState(
-                            label = "ПАПКА НЕДОСТУПНА",
-                            message = document.message,
-                            onOpenFolder = openFolder,
-                        )
+                        is EditorDocument.FolderFailed -> if (openSource == null) {
+                            EmptyState(
+                                label = "ПАПКА НЕДОСТУПНА",
+                                message = document.message,
+                                onOpenFolder = openFolder,
+                            )
+                        }
 
-                        is EditorDocument.Browsing -> FolderDocuments(
-                            browsing = document,
-                            onOpenDocument = model::open,
-                            onOpenFolder = openFolder,
-                        )
+                        is EditorDocument.Browsing -> if (openSource == null) {
+                            FolderDocuments(
+                                browsing = document,
+                                onOpenDocument = model::open,
+                                onOpenFolder = openFolder,
+                            )
+                        }
                     }
                 }
 
@@ -418,6 +467,7 @@ fun EditorScreen(
 private fun EditorAppBar(
     document: EditorDocument,
     editor: DocumentEditor,
+    openingName: String?,
     retryWriteVisible: Boolean,
     onBack: () -> Unit,
     onUndo: () -> Unit,
@@ -462,6 +512,18 @@ private fun EditorAppBar(
                     )
                 }
             }
+        } else if (openingName != null) {
+            // Документ ещё читается: имя в шапке вместо пустоты. Чтение через
+            // SAF занимает заметное время, и голый экран без единой подписи
+            // читается как сбой (замечание ревью `SL-2` фичи 009).
+            Text(
+                text = openingName,
+                style = adocTextStyle(AdocTypography.screenTitle),
+                color = AdocTheme.colors.textFaint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         } else {
             Box(modifier = Modifier.weight(1f))
         }
