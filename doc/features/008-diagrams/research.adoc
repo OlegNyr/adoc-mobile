@@ -195,8 +195,8 @@ toc::[]
 | `:kroki-fetch-diagram:`
 | `literalblock kroki-error` с исходным текстом диаграммы
 
-| `plantuml::diagrams/seq.puml[]` (блочный макрос, чтение файла)
-| `paragraph kroki-error` с текстом `not a function - plantuml::…`
+| `\plantuml::diagrams/seq.puml[]` (блочный макрос, чтение файла)
+| `paragraph kroki-error` с текстом `not a function - \plantuml::…`
 
 | расширение *не зарегистрировано*
 | обычный `literalblock` без роли `kroki`, сети нет вообще
