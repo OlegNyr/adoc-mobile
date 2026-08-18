@@ -22,6 +22,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.TransportCommand
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.api.errors.CheckoutConflictException
 import org.eclipse.jgit.api.errors.InvalidRemoteException
@@ -36,6 +37,8 @@ import org.eclipse.jgit.patch.FileHeader.PatchType
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.revwalk.filter.RevFilter
 import org.eclipse.jgit.transport.RemoteRefUpdate
+import org.eclipse.jgit.transport.SshSessionFactory
+import org.eclipse.jgit.transport.SshTransport as SshTransportCommand
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 import org.eclipse.jgit.treewalk.FileTreeIterator
@@ -69,6 +72,7 @@ import org.eclipse.jgit.util.io.DisabledOutputStream
 class JGitSync(
     private val reposRoot: File,
     private val secrets: GitSecretStore? = null,
+    private val ssh: SshTransport? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : GitSync {
@@ -120,6 +124,7 @@ class JGitSync(
             deliver = { progress -> trySendBlocking(CloneEvent.Progress(progress)) },
         )
 
+        val sshFactory = sshFactoryFor(request.url)
         try {
             // runInterruptible: отмена корутины прерывает поток, и блокирующее
             // сетевое чтение JGit падает, а не живёт до таймаута транспорта.
@@ -130,6 +135,7 @@ class JGitSync(
                     .apply { request.branch?.let { setBranch(it) } }
                     .apply { if (request.shallow) setDepth(1) }
                     .apply { credentialsFor(auth)?.let { setCredentialsProvider(it) } }
+                    .withSsh(sshFactory)
                     .setProgressMonitor(monitor)
                     .call()
                     .use { git -> snapshotOf(git, request.directoryName) }
@@ -356,8 +362,10 @@ class JGitSync(
         try {
             Git.open(dir).use { git ->
                 val before = git.repository.resolve(HEAD)
+                val originUrl = git.repository.config.getString("remote", ORIGIN, "url").orEmpty()
+                val pullCommand = git.pull().withSsh(sshFactoryFor(originUrl))
                 val result = runInterruptible {
-                    git.pull()
+                    pullCommand
                         .apply {
                             val origin = git.repository.config.getString("remote", ORIGIN, "url").orEmpty()
                             storedCredentials(origin)?.let { setCredentialsProvider(it) }
@@ -708,9 +716,11 @@ class JGitSync(
         try {
             Git.open(dir).use { git ->
                 val branch = git.repository.branch
+                val originUrl = git.repository.config.getString("remote", ORIGIN, "url").orEmpty()
                 val results = git.push()
                     .setRemote(ORIGIN)
                     .add("refs/heads/$branch")
+                    .withSsh(sshFactoryFor(originUrl))
                     // Сохранённый токен переиспользуется без повторного ввода
                     // (FR-26) — только для https-хоста, которому он выдан.
                     .apply {
@@ -788,6 +798,28 @@ class JGitSync(
      * Провайдер учётных данных для явно предъявленного способа (`FR-26`):
      * токен — имя пользователя с пустым паролем (механика из разведки, Q2).
      */
+    /**
+     * Подставить SSH-транспорт операции, если адрес — SSH (`FR-27`).
+     *
+     * Фабрика ставится на *команду*, а не глобально (`SshSessionFactory.setInstance`):
+     * глобальная подмена пережила бы удаление ключа с экрана и утекла бы в
+     * чужие операции процесса.
+     */
+    private fun <T : TransportCommand<*, *>> T.withSsh(factory: SshSessionFactory?): T = apply {
+        if (factory == null) return@apply
+        setTransportConfigCallback { transport ->
+            if (transport is SshTransportCommand) transport.sshSessionFactory = factory
+        }
+    }
+
+    /**
+     * Фабрика SSH-сессий для адреса или `null` — адрес не SSH либо ключа на
+     * устройстве нет. Вызывается до блокирующей части операции: внутри
+     * [runInterruptible] приостанавливаться нельзя.
+     */
+    private suspend fun sshFactoryFor(url: String): SshSessionFactory? =
+        if (isSshUrl(url)) ssh?.sessionFactory() else null
+
     private fun credentialsFor(auth: GitAuth): UsernamePasswordCredentialsProvider? = when (auth) {
         is GitAuth.None -> null
         is GitAuth.Token -> UsernamePasswordCredentialsProvider(auth.token.value, "")
@@ -799,6 +831,14 @@ class JGitSync(
      * сохранён, и только по `https`: чужой сервер или голый `http` секрета
      * не увидят (`NFR-8`, находка security-ревью E2).
      */
+    /**
+     * SSH ли адрес: `git@host:path` (scp-форма) или `ssh://…`.
+     * По HTTPS ключ не предъявляется — там работает токен.
+     */
+    private fun isSshUrl(url: String): Boolean =
+        url.startsWith("ssh://", ignoreCase = true) ||
+            (url.contains('@') && url.substringAfter('@').contains(':') && !url.contains("://"))
+
     private fun storedCredentials(remoteUrl: String): UsernamePasswordCredentialsProvider? {
         val host = httpsHostOf(remoteUrl) ?: return null
         return secrets?.tokenFor(host)?.let { UsernamePasswordCredentialsProvider(it.value, "") }

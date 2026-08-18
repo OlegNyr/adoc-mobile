@@ -1,7 +1,7 @@
 = Разведка — Git-синхронизация
 :feature: 007-git-sync
 :status: done
-:updated: 2026-08-17
+:updated: 2026-08-19
 :question: На чём и с какими ограничениями реализуем полный Git-цикл (clone/pull/commit/push) на Android
 :toc: macro
 :toc-title: Содержание
@@ -109,9 +109,9 @@ toc::[]
 Клиентская сторона JGit проверена фактом против `file://`-remote — <<spike-e0-h2>>; поведение настоящих серверов (GitHub/GitLab) остаётся на ручные кейсы E2.
 * *H3 — снята спайком E0.* Первый доступ JGit к репозиторию измеряет разрешение файловых таймстампов (`FileStoreAttributes`), что могло дать заметную паузу первой операции.
 Факт: на устройстве холодная первая операция дороже тёплой на ~60–70 мс — эффект есть, но лечения конфигом не требует — <<spike-e0-h3>>.
-* *H4 — не проверена.* Android Keystore не подписывает ed25519, поэтому SSH-ключ нельзя держать в Keystore неизвлекаемым — хранить придётся файл ключа, зашифрованный AES-ключом из Keystore.
-Схема «файл + Keystore-ключ» — стандартный паттерн после деприкации `EncryptedSharedPreferences`; границы поддержки алгоритмов Keystore не проверялись.
-В объём спайка E0 не входила; проверяется перед E4.
+* *H4 — проверена спайком E4, вердикт «формулировка опровергнута, вывод в силе».*
+Утверждение «Keystore не подписывает ed25519» на актуальном Android неверно: ключ генерируется и подписывает — но только при `setDigests(DIGEST_NONE)` и в DER-обёртке, тогда как SSH требует сырые 64 байта.
+Практический вывод не изменился: приватный ключ живёт файлом в хранилище секретов, зашифрованным ключом из Keystore — <<spike-e4-h4>> и xref:../../adr/adr-015-ssh-key-storage.adoc[ADR-015].
 * *H5 — подтверждена спайком E0.* Убийство процесса системой посреди операции оставляет stale-lock (`.git/index.lock`), и следующая операция падает с `LockFailedException`.
 Проверено фактом через `am force-stop` с занятым lock; протокол лечения — удалить lock-файл и повторить — <<spike-e0-h5>>.
 --
@@ -213,6 +213,69 @@ Push из shallow-клона прошёл за 15 мс со статусом `re
 * Риск «push из shallow не проходит» снят для клиентской стороны; unshallow-fetch перед push в план не добавляется, серверные оговорки уходят в ручные кейсы E2.
 * H3 в требования не конвертируется: паузы, требующей прогресс-индикатора или конфига, нет.
 * Протокол NFR-5 подтверждён исполнимым: обнаружение `LockFailedException` + удаление `index.lock` с подтверждением пользователя + повтор операции.
+
+[#spike-e4]
+== Спайк E4 (SL-15) — ed25519 в Keystore и MINA sshd на ART
+
+Стенд:: Samsung SM-S948B (Android 16, API 36), JGit `7.7.1` + `org.eclipse.jgit.ssh.apache` той же версии.
+Прототип — выбрасываемый инструментальный тест `androidApp/src/androidTest/.../SshSpikeTest.kt`; результаты снимались из logcat (тег `SshSpike`).
+Дата прогона — 2026-08-18.
+
+[#spike-e4-build]
+=== Факт сборки: sshd и `META-INF`
+
+Apache MINA sshd тянет зависимости с одинаковыми путями `META-INF`, и упаковка APK падает:
+`2 files found with path 'META-INF/DEPENDENCIES'`.
+Дубль не один: следом всплывает `OSGI-INF/l10n/plugin.properties` — его несут и сам JGit, и его SSH-бандл, и вторая ошибка приходит только после починки первой.
+Лечится блоком `packaging { resources { excludes += … } }` в `:androidApp` — это метаданные Maven, в рантайме бесполезные.
+Грабли уровня проекта, а не слайса: они повторятся при подключении sshd к любому новому модулю, поэтому продублированы в `CLAUDE.md`.
+
+[#spike-e4-h4]
+=== H4 — ed25519 в Android Keystore
+
+[cols="2,3", options="header"]
+|===
+| Проба | Факт
+
+| `KeyPairGenerator("Ed25519", "AndroidKeyStore")`
+| OK — ключ генерируется (API 36)
+
+| `KeyPairGenerator(EC)` с `ECGenParameterSpec("ed25519")`
+| OK — тоже генерируется
+
+| Провайдеры с Ed25519 в системе
+| `AndroidKeyStoreBCWorkaround`, `AndroidKeyStore`
+
+| Приватный ключ: `format` / `encoded`
+| `null` / `null` — материал неизвлекаем, как и обещает Keystore
+
+| Подпись `Signature("Ed25519")` без `setDigests`
+| FAIL — `InvalidKeyException: Keystore operation failed` ← `KeyStoreException: Incompatible digest`
+
+| То же с `setDigests(DIGEST_SHA512)`
+| FAIL — та же `Incompatible digest`
+
+| То же с *`setDigests(DIGEST_NONE)`*
+| *OK* — подпись выдаётся, длина 72 байта (DER)
+
+| `Signature("NONEwithEdDSA")`
+| FAIL — `NoSuchAlgorithmException: NONEwithEdDSA Signature not available`
+
+| `Signature("EdDSA")`
+| FAIL — `InvalidKeyException: No installed provider supports this key`
+
+| Контроль: ed25519 обычным провайдером (не Keystore)
+| OK — подпись создаётся и проверяется, публичный ключ 44 байта X.509
+|===
+
+Вердикт:: Формулировка гипотезы неверна (подпись работает при `DIGEST_NONE`), но её вывод — «приватный ключ хранить файлом, зашифрованным ключом из Keystore» — остаётся в силе: DER вместо сырых 64 байт, ожидание обычного `KeyPair` со стороны MINA sshd и `minSdk 26`.
+Решение записано xref:../../adr/adr-015-ssh-key-storage.adoc[ADR-015].
+
+[#spike-e4-sshd]
+=== ADR-007 — MINA sshd на ART: подтверждён
+
+`SshdSessionFactory` грузится и инстанцируется на устройстве; доступны `SshdSessionFactoryBuilder` и `ServerKeyDatabase` — последний и есть точка политики host key (`FR-29`), то есть подтверждение неизвестного ключа пользователем реализуемо штатным API, без своего транспорта.
+Риск `ADR-007` «работоспособность связки JGit 7.x + sshd на ART» снят.
 
 == Что уже есть у нас
 

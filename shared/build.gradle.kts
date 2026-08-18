@@ -525,6 +525,8 @@ kotlin {
             // verifyJGitPackaged там же. Вернуть implementation, когда AGP
             // починит конвейер device-тестов KMP-модуля.
             compileOnly(libs.jgit)
+            // SSH-транспорт (E4) — тем же приёмом, что сам JGit.
+            compileOnly(libs.jgit.ssh.apache)
 
             // Движок рендера (FR-2). Он приезжает вместе с нативной библиотекой
             // QuickJS, поэтому объявлен implementation: приложению видеть его

@@ -28,6 +28,29 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Apache MINA sshd (ADR-007) тянет зависимости со своими META-INF, и
+    // одинаковые пути из двух джарников валят упаковку APK
+    // («2 files found with path 'META-INF/DEPENDENCIES'»). Это метаданные
+    // сборки Maven, в рантайме бесполезные, — исключаем их из пакета.
+    // Факт установлен спайком E4 (см. research 007 и CLAUDE.md).
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/NOTICE.md",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/LICENSE.md",
+                "META-INF/INDEX.LIST",
+                "META-INF/*.kotlin_module",
+                // JGit и его SSH-бандл несут одинаковые OSGi-метаданные.
+                "OSGI-INF/l10n/plugin.properties",
+            )
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
@@ -213,10 +236,13 @@ dependencies {
     // (records, факт спайка E0). Классы в APK кладёт приложение; пропажу ловит
     // verifyJGitPackaged ниже.
     implementation(libs.jgit)
+    // SSH-транспорт (E4): рантайм-половина, как у самого JGit.
+    implementation(libs.jgit.ssh.apache)
 
     // Инструментальные тесты Git-слоя (SL-2): JGit в тестовом APK нужен и сам
     // по себе — тесты строят file://-remote руками.
     androidTestImplementation(libs.jgit)
+    androidTestImplementation(libs.jgit.ssh.apache)
     // Корутины в тестах используются напрямую (runBlocking, сбор Flow) —
     // зависимость явная, а не наследство classpath приложения.
     androidTestImplementation(libs.kotlinx.coroutines.core)

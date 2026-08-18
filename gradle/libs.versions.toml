@@ -57,6 +57,11 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
+# SSH-транспорт JGit (ADR-007): Apache MINA sshd, не JSch. Версия — та же
+# линия, что у JGit. Подключается тем же приёмом, что jgit: compileOnly в
+# :shared (дексация device-тестов KMP-модуля не пропускает records), рантайм
+# и тестовый APK — из :androidApp.
+jgit-ssh-apache = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.apache", version.ref = "jgit" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 
 [plugins]
