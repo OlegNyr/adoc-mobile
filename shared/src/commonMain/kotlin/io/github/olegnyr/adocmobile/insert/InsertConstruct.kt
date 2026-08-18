@@ -1,5 +1,7 @@
 package io.github.olegnyr.adocmobile.insert
 
+import io.github.olegnyr.adocmobile.highlight.AdocBlockKind
+
 /**
  * Конструкция панели быстрой вставки: что именно встаёт в текст по касанию
  * кнопки — слайсы `SL-1`/`SL-2` фичи 006-quick-insert-panel.
@@ -73,12 +75,37 @@ data class MacroTemplate(
  * Всегда с начала строки: в середине непустой строки заготовка отделяется
  * переводами строк с обеих сторон — правило блочных заготовок аналитики,
  * то же, что у блочной `image::`.
+ *
+ * @property inside сокращённая форма внутри блока того же вида (`FR-15`);
+ * `null` — заготовка от контекста каретки не зависит (admonition: абзацная
+ * форма своего блока не открывает)
  */
 data class BlockTemplate(
     val before: String,
     val after: String,
     val placeholder: String = "",
+    val inside: InsideBlockForm? = null,
 ) : InsertConstruct
+
+/**
+ * Форма блочной заготовки, когда каретка уже внутри блока того же вида
+ * (`FR-15`, решение владельца 2026-08-18): шапка не дублируется, закрывающий
+ * ограничитель вставляется всё равно.
+ *
+ * Тип блока — тот же перечень, что у подсветки: контекст каретки читается у её
+ * блочного автомата ([blockKindAt]), своего разбора у панели нет.
+ *
+ * @property kind тип блока сканера, внутри которого форма сокращается
+ * @property before голова заготовки без шапки: у блока кода — пара `----` без
+ * строки `[source]`, у таблицы — ограничитель без ячейки `| `
+ * @property leadingBreak отделять ли заготовку переводом строки, когда каретка
+ * стоит в середине непустой строки; у таблицы — нет (`TC-15`)
+ */
+data class InsideBlockForm(
+    val kind: AdocBlockKind,
+    val before: String,
+    val leadingBreak: Boolean = true,
+)
 
 /**
  * Конструкции базового ряда — формы из таблицы «Заготовки конструкций»
@@ -111,12 +138,30 @@ object InsertConstructs {
 
     // Конструкции раскрытия `›` (FR-11, вид раскрытия — решение OQ-1).
 
-    /** Таблица: минимальная рамка `|===` с одной ячейкой, каретка в ней. */
-    val table = BlockTemplate(before = "|===\n| ", after = "\n|===")
+    /**
+     * Таблица: минимальная рамка `|===` с одной ячейкой, каретка в ней.
+     *
+     * Внутри таблицы — только пара ограничителей, без ячейки-шапки и без
+     * ведущего перевода строки (`FR-15`, `TC-15`).
+     */
+    val table = BlockTemplate(
+        before = "|===\n| ",
+        after = "\n|===",
+        inside = InsideBlockForm(kind = AdocBlockKind.Table, before = "|===\n"),
+    )
 
     /** Admonition — абзацная `NOTE: текст` (дорешённый `OQ-5`). */
     val admonition = BlockTemplate(before = "NOTE: ", after = "", placeholder = "текст")
 
-    /** Блок кода: `[source]` и пара `----`, каретка на пустой строке между ними. */
-    val listing = BlockTemplate(before = "[source]\n----\n", after = "\n----")
+    /**
+     * Блок кода: `[source]` и пара `----`, каретка на пустой строке между ними.
+     *
+     * Внутри блока кода шапка `[source]` не дублируется — только пара
+     * ограничителей (`FR-15`, `TC-14`).
+     */
+    val listing = BlockTemplate(
+        before = "[source]\n----\n",
+        after = "\n----",
+        inside = InsideBlockForm(kind = AdocBlockKind.Listing, before = "----\n"),
+    )
 }

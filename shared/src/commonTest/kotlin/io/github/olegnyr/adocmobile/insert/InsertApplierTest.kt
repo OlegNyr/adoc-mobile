@@ -12,8 +12,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Критерии приёмки фичи 006-quick-insert-panel, слайс SL-1: `TC-1`, `TC-2`,
- * `TC-8` и сторож одного шага отмены `TC-3`.
+ * Критерии приёмки фичи 006-quick-insert-panel: `TC-1`, `TC-2`, `TC-8` и
+ * сторож одного шага отмены `TC-3` (SL-1), формы базового ряда и раскрытия
+ * (`TC-4`…`TC-7`, SL-2/SL-3), контекст каретки у блочной вставки
+ * (`TC-14`…`TC-16`, SL-5).
  *
  * Проверяется логика вставки на настоящем [TextFieldState] — устройству здесь
  * делать нечего (`NFR-10`): и текст, и выделение, и история отмены живут в
@@ -359,6 +361,112 @@ class InsertApplierTest {
 
         assertEquals("[source]\n----\n\n----", state.text.toString())
         assertEquals(TextRange(14), state.selection)
+    }
+
+    /**
+     * `TC-14`, `FR-15`: каретка внутри блока кода — вставляется только пара
+     * `----`, шапка `[source]` не дублируется. Контекст каретки берётся у
+     * блочного автомата подсветки, второго разбора AsciiDoc здесь нет.
+     */
+    @Test
+    fun TC_14_listingInsideListingInsertsFencesWithoutSourceHeader() {
+        val state = TextFieldState("[source]\n----\n\n----", initialSelection = TextRange(14))
+
+        state.applyInsert(InsertConstructs.listing)
+
+        assertEquals("[source]\n----\n----\n\n----\n----", state.text.toString())
+        assertEquals(
+            1,
+            Regex("\\[source]").findAll(state.text).count(),
+            "Внутри блока кода строка [source] прибавляться не должна (TC-14).",
+        )
+        assertEquals(TextRange(19), state.selection, "Каретка — на пустой строке между ограничителями.")
+    }
+
+    /**
+     * `TC-14`: то же в середине строки внутри блока — сокращается только шапка,
+     * заготовка по-прежнему отделяется переводом строки, закрывающий
+     * ограничитель вставляется всегда (`FR-15`).
+     */
+    @Test
+    fun TC_14_listingInsideListingMidLineKeepsSeparatorAndClosingFence() {
+        val state = TextFieldState("[source]\n----\nкод\n----", initialSelection = TextRange(17))
+
+        state.applyInsert(InsertConstructs.listing)
+
+        assertEquals("[source]\n----\nкод\n----\n\n----\n----", state.text.toString())
+        assertEquals(TextRange(23), state.selection)
+    }
+
+    /**
+     * `TC-15`, `FR-15`: каретка внутри таблицы — только пара ограничителей, без
+     * ячейки-шапки `| ` и без ведущего перевода строки.
+     */
+    @Test
+    fun TC_15_tableInsideTableInsertsOnlyDelimiters() {
+        val state = TextFieldState("|===\n| ячейка\n|===", initialSelection = TextRange(13))
+
+        state.applyInsert(InsertConstructs.table)
+
+        assertEquals("|===\n| ячейка\n|===\n\n|===\n|===", state.text.toString())
+        // Ограничитель начинает строку: приклеенный к тексту `|===` перестаёт
+        // быть ограничителем. «Без ведущего перевода строки» из решения владельца
+        // означает отсутствие лишней пустой строки и шапки `| `, а не склейку.
+        assertEquals(TextRange(19), state.selection, "Каретка — на строке между ограничителями.")
+    }
+
+    /**
+     * `TC-16`, сторож регресса `FR-15`: вне блоков заготовки прежние —
+     * `[source]` с парой `----` и `|===` с ячейкой.
+     */
+    @Test
+    fun TC_16_outsideBlocksKeepsFullTemplates() {
+        val listing = TextFieldState("", initialSelection = TextRange(0))
+        listing.applyInsert(InsertConstructs.listing)
+        assertEquals("[source]\n----\n\n----", listing.text.toString())
+        assertEquals(TextRange(14), listing.selection)
+
+        val table = TextFieldState("абв", initialSelection = TextRange(3))
+        table.applyInsert(InsertConstructs.table)
+        assertEquals("абв\n|===\n| \n|===", table.text.toString())
+        assertEquals(TextRange(11), table.selection)
+    }
+
+    /** `TC-16`: закрытый выше блок кода контекстом каретки не считается — заготовка полная. */
+    @Test
+    fun TC_16_afterClosedListingTemplateIsFullAgain() {
+        val state = TextFieldState("[source]\n----\nкод\n----\nабв", initialSelection = TextRange(26))
+
+        state.applyInsert(InsertConstructs.listing)
+
+        assertEquals("[source]\n----\nкод\n----\nабв\n[source]\n----\n\n----", state.text.toString())
+        assertEquals(TextRange(41), state.selection)
+    }
+
+    /**
+     * `TC-16`: на строке открывающего ограничителя каретка ещё вне блока —
+     * заготовка полная. Граница считается так же, как её видит подсветка:
+     * контекст строки — состояние автомата *после предыдущей* строки.
+     */
+    @Test
+    fun TC_16_onOpeningFenceLineTemplateIsFull() {
+        val state = TextFieldState("[source]\n----\n\n----", initialSelection = TextRange(13))
+
+        state.applyInsert(InsertConstructs.listing)
+
+        assertEquals("[source]\n----\n[source]\n----\n\n----\n\n----", state.text.toString())
+        assertEquals(TextRange(28), state.selection)
+    }
+
+    /** `TC-16`: блок кода таблицу не сокращает — сокращение только внутри блока того же вида (`FR-15`). */
+    @Test
+    fun TC_16_tableInsideListingKeepsFullTemplate() {
+        val state = TextFieldState("[source]\n----\n\n----", initialSelection = TextRange(14))
+
+        state.applyInsert(InsertConstructs.table)
+
+        assertEquals("[source]\n----\n|===\n| \n|===\n----", state.text.toString())
+        assertEquals(TextRange(21), state.selection)
     }
 
     /** `TC-3`, `FR-9` для блочных заготовок: таблица из раскрытия — один шаг отмены. */

@@ -204,13 +204,22 @@ private fun macroTemplateEdit(construct: MacroTemplate, text: CharSequence, star
  * получает выделенный заместитель (или каретку при пустом), непустое встаёт в
  * слот с кареткой за собой. Переводы строк вокруг — те же правила, что у
  * блочной `image::` в [macroTemplateEdit].
+ *
+ * Голова заготовки зависит от того, где стоит каретка (`FR-15`): внутри блока
+ * того же вида берётся сокращённая [BlockTemplate.inside] — шапка не
+ * дублируется. Вид блока спрашивается у блочного автомата подсветки
+ * ([blockKindAt]); закрывающий ограничитель вставляется в обеих формах.
  */
 private fun blockTemplateEdit(construct: BlockTemplate, text: CharSequence, start: Int, end: Int): InsertEdit {
+    val inside = construct.inside?.takeIf { it.kind == blockKindAt(text, start) }
+    val before = inside?.before ?: construct.before
+
     val slot = if (start == end) construct.placeholder else text.substring(start, end)
-    val leading = if (start > lineStartOf(text, start)) "\n" else ""
+    val leadingBreak = inside?.leadingBreak ?: true
+    val leading = if (leadingBreak && start > lineStartOf(text, start)) "\n" else ""
     val trailing = if (end < text.length && text[end] != '\n') "\n" else ""
 
-    val head = leading + construct.before
+    val head = leading + before
     val replacement = head + slot + construct.after + trailing
 
     val (selectionStart, selectionEnd) = if (start == end) {
