@@ -1,5 +1,7 @@
 package io.github.olegnyr.adocmobile.diagram
 
+import kotlin.concurrent.Volatile
+
 /**
  * Загруженное изображение диаграммы.
  *
@@ -64,32 +66,55 @@ fun diagramImagePath(address: KrokiAddress): String? {
  */
 class DiagramImageStore(private val maxEntries: Int = DEFAULT_MAX_ENTRIES) {
 
-    private val images = LinkedHashMap<String, DiagramImage>()
+    /**
+     * Снимок, а не изменяемая карта, и это про потоки, а не про стиль.
+     *
+     * Пишет сюда общий код (загрузка диаграмм), а *читает* платформенный
+     * перехват — с рабочего потока `WebView`, синхронно, пока уже
+     * опубликованная первая страница тянет картинки. То есть чтение и запись
+     * идут с разных потоков по определению, а не по недосмотру.
+     *
+     * Обычная карта такого не переживает: чтение во время вставки может застать
+     * её в разобранном виде. Поэтому запись собирает новый снимок и подменяет
+     * ссылку целиком, а чтение берёт ссылку и работает со своим неизменяемым
+     * снимком. Копия стоит десятки записей — против гонки, которая
+     * воспроизводится раз в сотню открытий.
+     */
+    @Volatile
+    private var entries: Map<String, DiagramImage> = emptyMap()
 
     /** Кладёт изображение и отдаёт локальный путь; `null` — формат не показуемый. */
     fun put(address: KrokiAddress, bytes: ByteArray): String? {
         val path = diagramImagePath(address) ?: return null
         val mimeType = mimeTypeForDiagramFormat(address.format) ?: return null
-        images.remove(path)
-        images[path] = DiagramImage(bytes, mimeType)
-        while (images.size > maxEntries) {
-            val oldest = images.keys.first()
-            images.remove(oldest)
+        val updated = LinkedHashMap<String, DiagramImage>(entries)
+        updated.remove(path)
+        updated[path] = DiagramImage(bytes, mimeType)
+        while (updated.size > maxEntries) {
+            updated.remove(updated.keys.first())
         }
+        entries = updated
         return path
     }
 
-    /** Изображение по локальному пути; обращение обновляет давность записи. */
-    fun read(path: String): DiagramImage? {
-        val image = images.remove(path) ?: return null
-        images[path] = image
-        return image
-    }
+    /**
+     * Изображение по локальному пути.
+     *
+     * Чтение *ничего не меняет* — намеренно. Раньше оно переставляло запись,
+     * чтобы вытеснять по давности обращения, и это делало чтение с чужого
+     * потока изменением структуры: ловушка, которую следующий читатель кода
+     * заметил бы уже по симптомам. Вытеснение теперь по давности *появления*, и
+     * этого достаточно: хранилище живёт в пределах запуска и держит картинки
+     * открытого документа. Вытеснение по давности обращения — свойство
+     * файлового кэша (`ADR-010`), и там оно будет опираться на файловую систему,
+     * а не на порядок в карте.
+     */
+    fun read(path: String): DiagramImage? = entries[path]
 
     /** Лежит ли изображение для этого адреса. */
     fun contains(address: KrokiAddress): Boolean {
         val path = diagramImagePath(address) ?: return false
-        return images.containsKey(path)
+        return entries.containsKey(path)
     }
 
     private companion object {

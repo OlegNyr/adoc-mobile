@@ -296,7 +296,7 @@ toc::[]
 
 | NFR-8
 | Безопасность и данные
-| Содержимое диаграмм уходит на внешний сервер — это риск уровня ПДн, и он называется прямо: при публичном `kroki.io` фрагменты документа получает третья сторона. Адрес диаграммы НЕ ДОЛЖЕН попадать в журнал: он обратим. В диагностику пишутся признак исхода, длина адреса и задержка. Загружаемые байты трактуются как недоверенные: MIME-тип берётся из перечня разрешённых, а не из ответа сервера; скрипты в превью выключены, поэтому SVG безопасен по тем же основаниям, что и в `PreviewImages.kt`. Секретов у фичи нет
+| Содержимое диаграмм уходит на внешний сервер — это риск уровня ПДн, и он называется прямо: при публичном `kroki.io` фрагменты документа получает третья сторона. Адрес диаграммы НЕ ДОЛЖЕН попадать в журнал: он обратим. В диагностику пишутся признак исхода, длина адреса и задержка. Загружаемые байты трактуются как недоверенные: MIME-тип берётся из формата диаграммы, а не из ответа сервера, и сами байты обязаны совпадать с сигнатурой этого формата — сервер может ответить `200` и прислать страницу входа в прокси. Названная цена правила: корректное изображение, приехавшее в неизвестной упаковке (например, со сжатием, которое мы не разворачиваем), деградирует в исходник. Диагностика исходов ведётся записью, в которой нет ни адреса, ни текста диаграммы (`TC-29`); скрипты в превью выключены, поэтому SVG безопасен по тем же основаниям, что и в `PreviewImages.kt`. Секретов у фичи нет
 
 | NFR-9
 | Доступность
@@ -751,7 +751,7 @@ And   следующее разрешение обращается к транс
 ----
 
 TC-17 (таймаут, automatable) — покрывает FR-10, UC-3::
-`[@test] (нет)`
+`[@test]` shared/src/androidHostTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramTimeoutTest.kt, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/screen/PreviewPipelineDiagramsTest.kt (деградация)
 [source,gherkin]
 ----
 Given транспорт, который не отвечает дольше таймаута
@@ -761,7 +761,7 @@ And   сборка страницы завершается, а не виснет
 ----
 
 TC-18 (edge, automatable) — покрывает FR-10::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramResolverTest.kt
 [source,gherkin]
 ----
 Given документ с восемью разными диаграммами и предел в 4 одновременные загрузки
@@ -873,22 +873,23 @@ And   диаграмма показана кодом с пометкой
 === Нефункциональные
 
 TC-29 (безопасность, automatable) — покрывает NFR-8::
-`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBlocksTest.kt (адрес не доживает до страницы; журнал — `SL-3`)
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramResolverTest.kt, shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramDiagnostics.kt
 [source,gherkin]
 ----
-Given диаграмма, чей исходник содержит строку «секретный проект»
-When  загрузка отказывает и пишется диагностическая запись
+Given диаграмма, адрес которой хранит содержимое документа
+When  загрузка кончается любым исходом и собирается диагностическая запись
 Then  запись содержит признак исхода, длину адреса и задержку
 And   не содержит ни адреса диаграммы, ни её текста
+And   собрать запись иначе, чем этим типом, нельзя
 ----
 
 TC-30 (безопасность, automatable) — покрывает NFR-8::
-`[@test] (нет)`
+`[@test]` shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramBytesTest.kt, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/diagram/DiagramResolverTest.kt, shared/src/commonTest/kotlin/io/github/olegnyr/adocmobile/screen/PreviewPipelineDiagramsTest.kt
 [source,gherkin]
 ----
-Given транспорт, отдающий байты с типом содержимого text/html
+Given транспорт, принёсший страницу входа в прокси с кодом 200
 When  изображение принимается
-Then  оно отвергается как не-изображение
+Then  оно отвергается: байты не совпадают с сигнатурой заявленного формата
 And   блок показан кодом с пометкой
 ----
 
@@ -980,7 +981,7 @@ xref:../../adr/adr-014-zlib-inflate.adoc[ADR-014] — распаковка zlib 
 | FR-7 | UC-1 | TC-6, TC-43 | SL-2, SL-3 | {st-done}
 | FR-8 | UC-1 | TC-7 | SL-3 | {st-done}
 | FR-9 | UC-1, UC-4 | TC-20 | SL-3 | {st-done}
-| FR-10 | UC-4 | TC-17, TC-18 | SL-4 | {st-todo}
+| FR-10 | UC-4 | TC-17, TC-18 | SL-4 | {st-done}
 | FR-11 | UC-4 | TC-12 | SL-3 | {st-done}
 | FR-12 | UC-1 | TC-19 | SL-11 | {st-todo}
 | FR-13 | UC-1 | TC-11, TC-39 | SL-2 | {st-done}
@@ -1000,14 +1001,14 @@ xref:../../adr/adr-014-zlib-inflate.adoc[ADR-014] — распаковка zlib 
 | FR-27 | UC-6, UC-7 | TC-27 | SL-9 | {st-todo}
 | FR-28 | UC-5 | TC-31 | SL-7 | {st-todo}
 | FR-29 | — | — | — | не делается
-| NFR-1 | — | TC-32 | SL-3 | частично: проход измерен, бюджет пайплайна целиком — за `SL-4`
+| NFR-1 | — | TC-32, TC-17, TC-18 | SL-3, SL-4 | {st-done}
 | NFR-2 | — | TC-33 | SL-2 | {st-done}
 | NFR-3 | UC-3, UC-7 | TC-27 | SL-9 | {st-todo}
 | NFR-4 | — | TC-33 | SL-3 | {st-done}
-| NFR-5 | UC-4 | TC-21 | SL-3, SL-4 | частично: отмена загрузки закрыта
+| NFR-5 | UC-4 | TC-21 | SL-3, SL-4 | {st-done}
 | NFR-6 | UC-8 | TC-15 | SL-5 | {st-todo}
 | NFR-7 | UC-5 | TC-23 | SL-7 | к редактору неприменимо
-| NFR-8 | UC-3 | TC-29, TC-30, TC-35 | SL-1, SL-4 | частично: TC-35 закрыт
+| NFR-8 | UC-3 | TC-29, TC-30, TC-35 | SL-1, SL-4 | {st-done}
 | NFR-9 | UC-3 | TC-31 | SL-2 | частично: правила стиля проверены, читаемость глазами — ручная проверка
 | NFR-10 | — | TC-33 | SL-2 | {st-done}
 | — | UC-1 | TC-34 | SL-12 | {st-todo}

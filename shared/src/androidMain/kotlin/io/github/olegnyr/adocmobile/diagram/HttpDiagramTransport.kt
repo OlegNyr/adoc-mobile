@@ -23,17 +23,25 @@ import java.net.URL
  *   документ;
  * * *не сообщает причину отказа* — показываем мы во всех случаях одно и то же.
  *
- * @param connectTimeoutMillis, readTimeoutMillis — базовые предохранители от
- * зависания. Требованием таймаут станет в `SL-4`, где ему найдут число; здесь
- * важно лишь, что бесконечного ожидания не бывает.
+ * Сроков здесь два, и второй важнее первого. `connectTimeout` и `readTimeout`
+ * платформы ограничивают *одну операцию*: сервер, отдающий по байту раз в
+ * девять секунд, не нарушает ни одного из них и держит соединение сколько
+ * захочет. Поэтому поверх них лежит абсолютный срок на весь запрос
+ * ([totalTimeoutMillis]) — он и есть требование `FR-10`.
+ *
+ * Отмена корутины блокирующее чтение не прерывает (это свойство JVM, а не
+ * недосмотр), поэтому дедлайн проверяется в самом цикле чтения.
  */
 class HttpDiagramTransport(
     private val connectTimeoutMillis: Int = 10_000,
     private val readTimeoutMillis: Int = 10_000,
+    private val totalTimeoutMillis: Long = DIAGRAM_REQUEST_TIMEOUT_MILLIS,
     private val maxBytes: Int = 4 shl 20,
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : DiagramTransport {
 
     override suspend fun fetch(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        val startedAt = clock()
         var connection: HttpURLConnection? = null
         try {
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -51,6 +59,11 @@ class HttpDiagramTransport(
                     val read = stream.read(buffer)
                     if (read < 0) break
                     if (out.size() + read > maxBytes) return@withContext null
+                    // Абсолютный срок: медленно капающий ответ обязан кончиться
+                    // так же, как молчащий (FR-10). Проверка стоит на каждом
+                    // блоке, а не на каждом байте, — этого достаточно: блок
+                    // приходит целиком или не приходит вовсе.
+                    if (clock() - startedAt > totalTimeoutMillis) return@withContext null
                     out.write(buffer, 0, read)
                 }
                 out.toByteArray()

@@ -32,6 +32,9 @@ class PreviewPipelineDiagramsTest {
 
     private val diagram = """<img src="https://kroki.example/plantuml/svg/AAAA" alt="схема">"""
 
+    /** Настоящее начало SVG: с SL-4 байты проверяются, и «1,2,3» больше не картинка. */
+    private val svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".encodeToByteArray()
+
     private var source = "= Документ"
 
     private fun pipeline(): PreviewPipeline = PreviewPipeline(
@@ -56,7 +59,7 @@ class PreviewPipelineDiagramsTest {
 
         pipeline.previewShown()
         val withPlaceholder = pipeline.html
-        transport.answerAll(byteArrayOf(1, 2, 3))
+        transport.answerAll(svg)
 
         assertTrue("kroki-pending" in withPlaceholder.orEmpty(), "первая публикация без плейсхолдера: $withPlaceholder")
         assertTrue("<img" in pipeline.html.orEmpty(), "картинка не подставлена: ${pipeline.html}")
@@ -85,7 +88,7 @@ class PreviewPipelineDiagramsTest {
         // Отвечает *первая* загрузка — та, что была запущена для уже
         // выброшенной страницы. Её ответ не имеет права ничего опубликовать:
         // показан другой документ.
-        transport.answerFirst(byteArrayOf(1, 2, 3))
+        transport.answerFirst(svg)
 
         assertTrue("Другой документ" in pipeline.html.orEmpty(), "показана не свежая страница: ${pipeline.html}")
         assertTrue("kroki-pending" in pipeline.html.orEmpty(), "поздний ответ подставил картинку на свежую страницу")
@@ -108,11 +111,22 @@ class PreviewPipelineDiagramsTest {
         pipeline.previewHidden()
 
         assertTrue(transport.cancelled > 0, "загрузка не была отменена уходом с превью")
-        transport.answerAll(byteArrayOf(1, 2, 3))
+        transport.answerAll(svg)
         assertEquals(withPlaceholder, pipeline.html, "отменённая загрузка всё же опубликовалась")
     }
 
-    /** Отказ загрузки превращает плейсхолдер в исходник с пометкой, а не оставляет его навсегда. */
+    /**
+     * `TC-8`, `TC-17` — покрывает `FR-19`: отказ загрузки превращает плейсхолдер
+     * в исходник с пометкой.
+     *
+     * Плейсхолдер обещает картинку. Если картинки не будет, обещание надо снять
+     * — иначе документ без сети остаётся с обещаниями до конца сеанса.
+     *
+     * Триггером здесь отказ транспорта, а не истечение срока, и это сознательно:
+     * дальше первого проходят оба одинаково — резолвер отдаёт «не загрузилось».
+     * Сам срок проверяется там, где ему нужны часы (`DiagramTimeoutTest`), а
+     * здесь — то, что пайплайн делает с этим исходом.
+     */
     @Test
     fun TC_8_failedLoadTurnsPlaceholderIntoSource() {
         val pipeline = pipeline()
@@ -120,10 +134,28 @@ class PreviewPipelineDiagramsTest {
         pipeline.previewShown()
         transport.failAll()
 
-        // Загрузка не принесла ничего: страница остаётся с плейсхолдером до
-        // следующего прогона — второй публикации не будет, потому что менять
-        // нечего. Это названная цена SL-3; деградацию по таймауту приносит SL-4.
-        assertTrue("kroki-pending" in pipeline.html.orEmpty(), "страница неожиданно изменилась: ${pipeline.html}")
+        assertFalse("kroki-pending" in pipeline.html.orEmpty(), "плейсхолдер остался навсегда: ${pipeline.html}")
+        assertTrue("ДИАГРАММА НЕ ЗАГРУЖЕНА" in pipeline.html.orEmpty(), "нет пометки: ${pipeline.html}")
+        assertTrue("a -&gt; b" in pipeline.html.orEmpty(), "исходник диаграммы не показан: ${pipeline.html}")
+    }
+
+    /**
+     * `TC-30` — покрывает `NFR-8`: то, что не похоже на картинку, картинкой не
+     * становится.
+     *
+     * Сервер ответил `200` и прислал страницу входа в прокси — обычное дело в
+     * корпоративной сети. Отдать её в `+<img>+` под видом `image/svg+xml` значит
+     * попросить `WebView` разобрать чужой HTML как SVG.
+     */
+    @Test
+    fun TC_30_foreignBytesAreRefusedAndBlockDegrades() {
+        val pipeline = pipeline()
+
+        pipeline.previewShown()
+        transport.answerAll("<!DOCTYPE html><html><body>Вход в сеть</body></html>".encodeToByteArray())
+
+        assertFalse("<img" in pipeline.html.orEmpty(), "чужие байты подставлены как картинка: ${pipeline.html}")
+        assertTrue("ДИАГРАММА НЕ ЗАГРУЖЕНА" in pipeline.html.orEmpty(), "нет пометки: ${pipeline.html}")
     }
 
     /**
