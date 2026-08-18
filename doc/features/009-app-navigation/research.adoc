@@ -1,0 +1,200 @@
+= Разведка — навигация приложения и врезка Git
+:feature: 009-app-navigation
+:status: done
+:updated: 2026-08-18
+:question: Что именно хостинг обязан дать готовым экранам, и на чём строить навигацию, которой в проекте нет
+:toc: macro
+:toc-title: Содержание
+:sectanchors:
+
+[IMPORTANT]
+Разведка *до* требований.
+Каждое утверждение — со ссылкой на файл, класс или документ.
+Без ссылки это гипотеза, и она помечается как гипотеза.
+Выводы уходят в ограничения и допущения аналитики и в ADR; требования сюда не пишутся.
+
+toc::[]
+
+== Вопросы разведки
+
+* [x] Q1 — есть ли в проекте механизм навигации или библиотека под него.
+* [x] Q2 — что именно готовые экраны требуют от хостинга: полный перечень обязательств из KDoc.
+* [x] Q3 — что сегодня переживает поворот и смерть процесса, и чем это сделано.
+* [x] Q4 — как устроено «удержание» источника у SAF-половины и у клона.
+* [x] Q5 — что не хватает для сборки `JGitSync` в приложении.
+* [x] Q6 — сколько конфликтных файлов ведёт экран слияния.
+* [x] Q7 — откуда берётся авторство merge-коммита, если коммита перед слиянием не было.
+
+== Как решает эталон
+
+Эталон здесь — не внешняя система, а собственные экраны фич 005 и 007: они написаны против воображаемого хостинга и описали его требованиями в KDoc.
+Разведка сводится к вычитыванию этих контрактов.
+
+[cols="1,2,2,2", options="header"]
+|===
+| Что | Где | Как устроено | Что берём
+
+| Обновление экрана репозитория
+| `screen/git/RepositoryScreen.kt:56`
+| `LaunchedEffect(model) { model.start() }` стреляет на вход в композицию; возврат к живому экземпляру требует явного `model.start()`
+| Обязательство хостинга: перечитывать состояние при возврате
+
+| Отказ push с экрана коммита
+| `screen/git/CommitScreen.kt:52`, `screen/git/RepositoryScreenModel.kt:133`
+| `onCommitted(pushFailure: String?)`; текст обязан доехать до `RepositoryScreenModel.showPushFailure`
+| Врезка «коммит → корень» несёт текст отказа
+
+| Переход на слияние
+| `screen/git/RepositoryScreen.kt:74`
+| Непустой `model.conflictPaths` — сигнал хостингу увести на экран слияния
+| Хостинг решает переход, модель только называет файлы
+
+| Один файл на экран слияния
+| `screen/git/ConflictScreenModel.kt:36`
+| Модель принимает единственный `path`; «при нескольких файлах хостинг ведёт их по очереди (`conflictPaths`)»
+| Очередь конфликтных файлов — работа хостинга
+
+| Авторство merge-коммита
+| `screen/git/ConflictScreen.kt:51`
+| `ConflictScreen(author: CommitAuthor)`; «хостинг обязан спросить его до входа сюда»
+| Хостингу нужен свой путь получения авторства
+
+| Сохранение перед pull
+| `screen/git/RepositoryScreenModel.kt:167`
+| `pullRequested(beforePull: suspend () -> Boolean, onPulled: (List<String>) -> Unit)`; `false` отменяет pull
+| Врезка немедленной записи открытого документа
+
+| Перечитка после pull
+| `screen/git/PullReread.kt`
+| `PullReread.shouldReread(open, changedPaths)`; исполняет хостинг вызовом `EditorScreenModel.open(source)`
+| Врезка перечитки
+
+| Гейт «платформа без Git»
+| `screen/git/CloneScreen.kt:63`
+| «Экран строится только при наличии реализации шва … решение принимает хостинг экрана»
+| `FR-2` фичи 007 живёт только в хостинге
+|===
+
+== Что даёт платформа
+
+[cols="2,1,2,2", options="header"]
+|===
+| API, библиотека или зависимость | Версия | Что умеет | Ограничение
+
+| `org.jetbrains.compose.ui:ui-backhandler`
+| линия Compose Multiplatform каталога (`gradle/libs.versions.toml:49`)
+| `BackHandler(enabled) { … }` в `commonMain`; уже применён в `screen/EditorScreen.kt:44,205`
+| Перехват только «назад»; стека не ведёт
+
+| `rememberSaveable`
+| Compose runtime каталога
+| Переживает поворот и смерть процесса; применён трижды в `screen/EditorScreen.kt:158,176,183`
+| Хранит только то, что кладётся в `Bundle`/`Saver`; сложный стек требует своего `Saver`
+
+| `androidx.navigation` / `voyager` / `decompose`
+| —
+| —
+| *В каталоге версий отсутствуют.* Навигационной библиотеки в проекте нет ни одной
+
+| `SharedPreferences`
+| Android SDK
+| Платформенное хранение мелких признаков; так живут удержанные ссылки — `document/AndroidDocumentTreeAccess.kt:35,334` (`document-tree-access`) и `document/AndroidDocumentFileAccess.kt:36,208`
+| Только `androidMain`; общей половине нужен интерфейс
+|===
+
+Проверено фактом (спайк):: Спайк не проводился и не нужен: все утверждения выше — чтение существующего кода и каталога версий, а не гипотезы о поведении внешних систем.
+
+Гипотезы (не проверено)::
++
+--
+* Собственный стек навигации на `rememberSaveable` со `Saver` из списка строк восстановится после смерти процесса так же надёжно, как `fieldSourceId` в `EditorScreen.kt:176`.
+Обоснование — тот же механизм, но проверяется тестом слайса, а не берётся на веру.
+* `androidx.navigation` в мультиплатформенной сборке совместим с AGP 9 и текущей линией Compose.
+Не проверено; если владелец выберет библиотеку (`OQ-1`), проверка становится спайком до реализации.
+--
+
+== Что уже есть у нас
+
+[cols="2,2,2", options="header"]
+|===
+| Наш код | Роль в фиче | Нужна ли доработка
+
+| `androidApp/src/main/kotlin/io/github/olegnyr/adocmobile/android/MainActivity.kt`
+| Единственный хостинг; строит `EditorScreenHost()` и больше ничего
+| Да: становится хостингом навигации, а не одного экрана
+
+| `screen/EditorScreen.kt`, `screen/EditorScreenModel.kt`
+| Экран документа; сегодня несёт и список папки (`NoFolder`/`FolderFailed`/`Browsing`/`Open`)
+| Да: судьба состояний списка — `OQ-2`
+
+| `screen/git/RepositoryScreen.kt`, `CloneScreen.kt`, `CommitScreen.kt`, `ConflictScreen.kt` и их модели
+| Четыре готовых экрана с тестами
+| Нет по существу; нужен только хостинг и то, что он обязан по KDoc
+
+| `git/RepoDocumentAccess.kt` (`androidMain`)
+| `DocumentTreeAccess` поверх рабочей копии клона; `id` документа — путь от корня, как в `RepoFile.path`
+| Нет; но `heldSource` живёт только в памяти процесса (KDoc, `:38`) — восстановление отдано хостингу
+
+| `document/AndroidDocumentTreeAccess.kt`
+| `DocumentTreeAccess` поверх SAF-дерева, право удерживается в `SharedPreferences`
+| Нет
+
+| `git/JGitSync.kt` (`androidMain`)
+| Реализация шва; `JGitSync(reposRoot: File, secrets: GitSecretStore?, …)`
+| Нет; KDoc `:55` прямо говорит: «Привязку к `Context.filesDir` делает хостинг приложения»
+
+| `git/AndroidSecretStore.kt`
+| `GitSecretStore` на Android Keystore; `AndroidSecretStore(file: File, keyAlias: String)`
+| Нет; хостинг обязан её создать и передать в `JGitSync`
+|===
+
+== Ограничения и риски, найденные разведкой
+
+* *Навигационной библиотеки в проекте нет.*
+Подтверждение — `gradle/libs.versions.toml`, где из навигационного только `compose-ui-backhandler:49`.
+Следствие: механизм навигации — развилка уровня решения (`OQ-1`, ADR-001 фичи), а не деталь реализации, потому что новая зависимость требует вопроса владельцу (границы `doc/development-rules.adoc`).
+
+* *Списка файлов в приложении сегодня два.*
+Экран репозитория показывает рекурсивный список рабочей копии (`RepositoryScreenModel.state.files`), экран редактора — `.adoc`-документы корня SAF-папки (`EditorDocument.Browsing`).
+Журнал 007 (`progress.adoc:130`) уже назвал это «двумя понятиями файлов» и запретил использовать `listDocuments` моста как выборщик файлов репозитория.
+Решение владельца «список один» делает это развилкой реализации (`OQ-2`, ADR-002 фичи).
+
+* *`CommitResult` конфликтов не порождает* (`git/GitSync.kt:151`): исходов у коммита два — `Committed` и `Failed`.
+Значит перехода «коммит → конфликт» в буквальном смысле не существует: конфликт приходит только от `PullResult.Conflicted`.
+Пользовательский путь после отказа push `non-fast-forward` идёт через корень: отказ виден плашкой, дальше `PULL`, дальше слияние.
+
+* *`RepoDocumentAccess.heldSource` не переживает процесс* (KDoc `:38`): относительный путь однозначен только в паре с репозиторием, поэтому мост намеренно не персистит.
+Для SAF-источника такой проблемы нет: `heldSource` там восстанавливается платформенной половиной.
+Асимметрия делает восстановление открытого документа клона развилкой (`OQ-3`).
+
+* *Диалог авторства заперт в экране коммита*: `AuthorDialog` — приватная функция `screen/git/CommitScreen.kt:289`, привязанная к `CommitScreenModel`.
+Путь «pull → конфликт» коммита не проходит, а `ConflictScreen` требует `CommitAuthor` — значит хостингу нужен свой способ спросить авторство.
+
+* *Тестируемость навигации.*
+`commonTest` покрывает несоставные модели (образцы — `EditorScreenModelTest`, `RepositoryScreenModelTest`), поэтому логика переходов обязана жить в несоставном классе, а не в `@Composable`.
+Иначе всё уедет в инструментальный прогон, что запрещено правилом «что требует устройства — обосновать» (`doc/development-rules.adoc`).
+
+== Ответы на вопросы разведки
+
+* *Q1* — навигации нет ни своей, ни библиотечной; единственный кирпич — `BackHandler`.
+Источник: `gradle/libs.versions.toml`, `screen/EditorScreen.kt:44,205`.
+* *Q2* — восемь обязательств, перечислены таблицей «Как решает эталон»; каждое подтверждено строкой KDoc.
+* *Q3* — переживают поворот и смерть процесса `TextFieldState` (через `TextFieldState.Saver`), `fieldSourceId` и `viewingList` — все три `rememberSaveable` в `screen/EditorScreen.kt:158,176,183`.
+У Git-экранов сохраняемого состояния нет вовсе: их модели создаёт хостинг, и после смерти процесса они начинаются заново.
+* *Q4* — SAF-половина держит право и ссылку в `SharedPreferences` (`AndroidDocumentTreeAccess.kt:35`), клон держит `heldSource` только в памяти (`RepoDocumentAccess.kt:52`), а сам факт клона восстанавливается чтением диска (`JGitSync.openRepository()`).
+* *Q5* — не хватает ровно двух аргументов: каталога клонов внутри `Context.filesDir` и `AndroidSecretStore` с файлом в приватном каталоге.
+Источник: `JGitSync.kt:55,62`, `AndroidSecretStore.kt:51`.
+* *Q6* — один (`ConflictScreenModel(path: String)`); очередь ведёт хостинг (`ConflictScreenModel.kt:36`).
+* *Q7* — `sync.author()` (`git/GitSync.kt:73`) отдаёт сохранённое авторство или `null`; при `null` спросить обязан хостинг, потому что диалог экрана коммита в этот путь не попадает.
+
+== Источники
+
+* `androidApp/src/main/kotlin/io/github/olegnyr/adocmobile/android/MainActivity.kt`
+* `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/screen/EditorScreen.kt`, `EditorScreenModel.kt`
+* `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/screen/git/` — `RepositoryScreen.kt`, `RepositoryScreenModel.kt`, `CloneScreen.kt`, `CommitScreen.kt`, `ConflictScreen.kt`, `ConflictScreenModel.kt`, `PullReread.kt`
+* `shared/src/commonMain/kotlin/io/github/olegnyr/adocmobile/git/GitSync.kt`
+* `shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/git/` — `JGitSync.kt`, `AndroidSecretStore.kt`, `RepoDocumentAccess.kt`
+* `shared/src/androidMain/kotlin/io/github/olegnyr/adocmobile/document/AndroidDocumentTreeAccess.kt`
+* `gradle/libs.versions.toml`
+* xref:../007-git-sync/progress.adoc[Журнал 007] — остатки E1 и записи `SL-4`, `SL-10`
+* xref:../007-git-sync/plan.adoc[План 007] — «Долг этапа UI» в уточнениях объёма E2
