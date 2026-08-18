@@ -3,11 +3,11 @@ package io.github.olegnyr.adocmobile.screen.git
 import io.github.olegnyr.adocmobile.git.CommitAuthor
 import io.github.olegnyr.adocmobile.git.CommitResult
 import io.github.olegnyr.adocmobile.git.ConflictChoice
-import io.github.olegnyr.adocmobile.git.ConflictHunk
 import io.github.olegnyr.adocmobile.git.FakeGitSync
 import io.github.olegnyr.adocmobile.git.GitCommitError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -15,10 +15,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Модель экрана слияния — слайс `SL-12` фичи 007-git-sync: `TC-21` (список
- * участков и счётчик), `TC-23` (предпросмотр пересобирается сразу),
- * `TC-24` (завершение недоступно с неразрешёнными участками), `TC-25`
- * (merge-коммит после разрешения), `TC-26` (отмена слияния).
+ * Модель экрана слияния — слайс `SL-12` фичи 007-git-sync: `TC-21` (участки и
+ * счётчик), `TC-23` (предпросмотр пересобирается), `TC-24` (завершение
+ * недоступно с неразрешёнными), `TC-25` (merge-коммит), `TC-26` (отмена),
+ * `TC-42` (неконфликтный текст сохраняется), `TC-45` (двойной тап и
+ * подтверждение отмены — дозаявлены ревью E3).
  */
 class ConflictScreenModelTest {
 
@@ -27,24 +28,38 @@ class ConflictScreenModelTest {
     private val path = "docs/vision.adoc"
     private val author = CommitAuthor("Инженер", "engineer@example.com")
 
-    private val twoHunks = listOf(
-        ConflictHunk(
-            ours = listOf(":status: черновик"),
-            theirs = listOf(":status: на ревью"),
-            oursLabel = "HEAD",
-            theirsLabel = "origin/main",
-        ),
-        ConflictHunk(
-            ours = listOf(":toc: macro"),
-            theirs = listOf(":sectnums:"),
-            oursLabel = "HEAD",
-            theirsLabel = "origin/main",
-        ),
-    )
+    /** Файл с заголовком, преамбулой и двумя участками — как в жизни. */
+    private val conflictedFile = listOf(
+        "= Документ",
+        "",
+        ":toc: macro",
+        "",
+        "<<<<<<< HEAD",
+        ":status: черновик",
+        "=======",
+        ":status: на ревью",
+        ">>>>>>> origin/main",
+        "",
+        "== Раздел",
+        "",
+        "<<<<<<< HEAD",
+        "моё два",
+        "=======",
+        "их два",
+        ">>>>>>> origin/main",
+        "",
+        "Хвост.",
+    ).joinToString("\n")
 
     private fun model(): ConflictScreenModel {
-        sync.hunks = mapOf(path to twoHunks)
+        sync.conflictedTexts = mapOf(path to conflictedFile)
         return ConflictScreenModel(sync = sync, path = path, scope = scope).also { it.start() }
+    }
+
+    private fun resolveBoth(model: ConflictScreenModel, first: ConflictChoice, second: ConflictChoice) {
+        model.choose(first)
+        model.nextHunk()
+        model.choose(second)
     }
 
     @Test
@@ -64,23 +79,37 @@ class ConflictScreenModelTest {
     }
 
     @Test
+    fun TC_23_previewShowsCurrentHunkFragmentNotWholeFile() {
+        // Макет «04»: блок РЕЗУЛЬТАТ — фрагмент участка. Целый документ на
+        // каждой рекомпозиции пересобирался бы (замечание ревью E3).
+        val model = model()
+        model.choose(ConflictChoice.Ours)
+
+        assertEquals(":status: черновик", model.preview, "предпросмотр — текущий участок")
+        assertTrue("= Документ" !in model.preview, "весь файл в предпросмотр не пересобирается")
+
+        model.nextHunk()
+        model.choose(ConflictChoice.Theirs)
+        assertEquals("их два", model.preview, "фрагмент следует за текущим участком и выбором")
+    }
+
+    @Test
     fun TC_23_previewRebuildsOnEveryChoice() {
         val model = model()
 
         model.choose(ConflictChoice.Ours)
-        val afterOurs = model.preview
-        assertTrue(":status: черновик" in afterOurs)
+        assertTrue(":status: черновик" in model.preview)
 
         model.choose(ConflictChoice.Theirs)
-        val afterTheirs = model.preview
-        assertTrue(":status: на ревью" in afterTheirs, "предпросмотр пересобран сразу (TC-23)")
-        assertTrue(":status: черновик" !in afterTheirs)
+        assertTrue(":status: на ревью" in model.preview, "предпросмотр пересобран сразу (TC-23)")
+        assertTrue(":status: черновик" !in model.preview)
 
         model.choose(ConflictChoice.Both)
-        val afterBoth = model.preview
-        assertTrue(":status: черновик" in afterBoth && ":status: на ревью" in afterBoth, "«ОБА» — обе версии")
+        assertTrue(":status: черновик" in model.preview && ":status: на ревью" in model.preview)
         assertTrue(
-            listOf("<<<<<<<", "=======", ">>>>>>>").none { it in afterBoth },
+            listOf("<<<<<<<", "=======", ">>>>>>>").none { marker ->
+                model.preview.lines().any { it.startsWith(marker) }
+            },
             "маркеров конфликта в предпросмотре нет",
         )
     }
@@ -88,33 +117,42 @@ class ConflictScreenModelTest {
     @Test
     fun TC_24_finishIsRefusedWhileAnyHunkIsUnresolved() {
         val model = model()
-        model.choose(ConflictChoice.Ours) // только первый участок
+        model.choose(ConflictChoice.Ours)
 
         assertTrue(!model.allResolved, "второй участок не разрешён (FR-24)")
         model.finishRequested(author)
 
         val phase = assertIs<ConflictScreenPhase.Resolving>(model.phase)
-        assertNotNull(phase.failure, "завершение объясняет отказ, а не молчит")
+        assertNotNull(phase.failure, "завершение объясняет отказ")
         assertEquals(0, sync.finishCount, "до шва запрос не дошёл")
         assertTrue(sync.resolved.isEmpty(), "файл не переписан")
     }
 
     @Test
-    fun TC_25_finishWritesResolvedFileAndCreatesMergeCommit() {
+    fun TC_25_finishWritesWholeFileAndCreatesMergeCommit() {
         val model = model()
-        model.choose(ConflictChoice.Theirs)
-        model.nextHunk()
-        model.choose(ConflictChoice.Ours)
+        resolveBoth(model, ConflictChoice.Theirs, ConflictChoice.Ours)
 
-        assertTrue(model.allResolved)
         model.finishRequested(author)
 
         assertIs<ConflictScreenPhase.Merged>(model.phase, "слияние завершено merge-коммитом (TC-25)")
         val written = assertNotNull(sync.resolved[path], "разрешённый текст записан")
-        assertEquals(listOf(":status: на ревью", ":toc: macro"), written.lines(), "выборы применены поучастково")
-        assertTrue(
-            listOf("<<<<<<<", "=======", ">>>>>>>").none { it in written },
-            "маркеров конфликта в файле не осталось (TC-25)",
+        assertEquals(
+            listOf(
+                "= Документ",
+                "",
+                ":toc: macro",
+                "",
+                ":status: на ревью",
+                "",
+                "== Раздел",
+                "",
+                "моё два",
+                "",
+                "Хвост.",
+            ),
+            written.lines(),
+            "на диск уходит ВЕСЬ файл: выборы участков плюс неконфликтный текст (TC-42)",
         )
         assertEquals(1, sync.finishCount)
     }
@@ -122,9 +160,7 @@ class ConflictScreenModelTest {
     @Test
     fun TC_25_mergeFailureKeepsScreenWithMessage() {
         val model = model()
-        model.choose(ConflictChoice.Ours)
-        model.nextHunk()
-        model.choose(ConflictChoice.Ours)
+        resolveBoth(model, ConflictChoice.Ours, ConflictChoice.Ours)
 
         sync.finishResult = CommitResult.Failed(GitCommitError.IndexLocked)
         model.finishRequested(author)
@@ -134,15 +170,89 @@ class ConflictScreenModelTest {
     }
 
     @Test
-    fun TC_26_abortReturnsRepositoryToPrePullState() {
+    fun TC_26_abortAsksForConfirmationAndOnlyThenReturnsRepository() {
         val model = model()
         model.choose(ConflictChoice.Ours)
 
         model.abortRequested()
+        assertIs<ConflictScreenPhase.ConfirmingAbort>(model.phase, "отмена спрашивает подтверждение (ревью E3)")
+        assertEquals(0, sync.abortCount, "без подтверждения репозиторий не трогается")
 
+        model.abortDismissed()
+        assertIs<ConflictScreenPhase.Resolving>(model.phase, "передумал — вернулись к разрешению")
+
+        model.abortRequested()
+        model.abortConfirmed()
         assertIs<ConflictScreenPhase.Aborted>(model.phase, "слияние отменено (TC-26)")
         assertEquals(1, sync.abortCount)
         assertEquals(0, sync.finishCount, "отмена не коммитит")
         assertTrue(sync.resolved.isEmpty(), "отмена не переписывает файл")
+    }
+
+    @Test
+    fun TC_45_doubleTapOnFinishCreatesOneMerge() {
+        val model = model()
+        resolveBoth(model, ConflictChoice.Ours, ConflictChoice.Ours)
+
+        val gate = Channel<Unit>()
+        sync.beforeResolve = { gate.receive() }
+
+        model.finishRequested(author)
+        assertIs<ConflictScreenPhase.Merging>(model.phase, "фаза занята синхронно, до точки приостановки")
+        model.finishRequested(author)
+        model.abortRequested()
+
+        assertTrue(gate.trySend(Unit).isSuccess)
+        assertIs<ConflictScreenPhase.Merged>(model.phase)
+        assertEquals(1, sync.finishCount, "двойной тап — одно слияние (TC-45)")
+        assertEquals(0, sync.abortCount, "отмена во время операции не проходит")
+    }
+
+    @Test
+    fun TC_48_finishIsRefusedWhenResolvedTextStillHasMarkers() {
+        // Файл с литеральным примером разметки: участок разобран, но в
+        // собранном тексте маркеры остаются — на диск он не уходит.
+        // Маркеры с отступом: разбор их не распознаёт (Git пишет с начала
+        // строки), поэтому они остаются в тексте — их обязан поймать сторож.
+        val withLiteralExample = listOf(
+            "= Документация",
+            "",
+            "  <<<<<<< HEAD",
+            "  пример",
+            "  =======",
+            "  их пример",
+            "  >>>>>>> origin/main",
+            "",
+            "<<<<<<< HEAD",
+            ":status: черновик",
+            "=======",
+            ":status: на ревью",
+            ">>>>>>> origin/main",
+        ).joinToString("\n")
+        sync.conflictedTexts = mapOf(path to withLiteralExample)
+        val model = ConflictScreenModel(sync = sync, path = path, scope = scope)
+        model.start()
+        repeat(model.hunks.size) { index ->
+            model.choose(ConflictChoice.Both)
+            if (index < model.hunks.lastIndex) model.nextHunk()
+        }
+
+        model.finishRequested(author)
+
+        val phase = assertIs<ConflictScreenPhase.Resolving>(model.phase, "коммита с маркерами не случается")
+        assertNotNull(phase.failure)
+        assertTrue(sync.resolved.isEmpty(), "файл не переписан")
+        assertEquals(0, sync.finishCount, "merge-коммит не создан")
+    }
+
+    @Test
+    fun TC_44_malformedMarkupIsRefusedWithMessageInsteadOfGuessing() {
+        sync.conflictedTexts = mapOf(path to "<<<<<<< HEAD\nмоё\n=======\nих\n")
+        val model = ConflictScreenModel(sync = sync, path = path, scope = scope)
+        model.start()
+
+        val phase = assertIs<ConflictScreenPhase.Resolving>(model.phase)
+        assertNotNull(phase.failure, "непонятная разметка — честный отказ, а не испорченный файл")
+        assertEquals(emptyList(), model.hunks)
     }
 }

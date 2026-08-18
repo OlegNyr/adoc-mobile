@@ -34,6 +34,7 @@ import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.ProgressMonitor
 import org.eclipse.jgit.patch.FileHeader.PatchType
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.revwalk.filter.RevFilter
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
@@ -162,7 +163,23 @@ class JGitSync(
      */
     override suspend fun openRepository(): RepositorySnapshot? = withContext(io) {
         val dir = firstRepositoryDir() ?: return@withContext null
+        // Временный файл записи мог пережить смерть процесса между записью и
+        // переименованием: иначе он остаётся навсегда и попадает в список
+        // экрана коммита (замечание независимой проверки).
+        sweepTempFiles(dir)
         Git.open(dir).use { git -> snapshotOf(git, dir.name) }
+    }
+
+    /** Убрать осиротевшие временные файлы записи разрешённого конфликта. */
+    private fun sweepTempFiles(workTree: File) {
+        try {
+            workTree.walkTopDown()
+                .onEnter { !it.name.equals(GIT_DIR, ignoreCase = true) && !Files.isSymbolicLink(it.toPath()) }
+                .filter { it.isFile && it.name.endsWith(TEMP_SUFFIX) }
+                .forEach { it.delete() }
+        } catch (_: Exception) {
+            // Уборка мусора не повод не открыть репозиторий.
+        }
     }
 
     /**
@@ -327,6 +344,12 @@ class JGitSync(
      * Список изменённых файлов для перечитки открытого документа (`FR-15`)
      * считается диффом «HEAD до» против «HEAD после» — так узнаётся ровно то,
      * что принёс pull, а не всё, что лежит в копии.
+     *
+     * Известное ограничение (ревью E3, долг этапа UI): merge-коммит
+     * *автоматического* слияния подписывается авторством из конфига
+     * репозитория, а на свежем клоне до первого ручного коммита его там нет —
+     * тогда JGit подставит собственный `PersonIdent`. Лечится запросом
+     * авторства до первого pull, что требует хостинга экранов.
      */
     override suspend fun pull(): PullResult = withContext(io) {
         val dir = firstRepositoryDir() ?: return@withContext PullResult.Failed(GitPullError.PullFailed)
@@ -353,7 +376,9 @@ class JGitSync(
                         if (before == after) {
                             PullResult.AlreadyUpToDate
                         } else {
-                            PullResult.Updated(changedPathsBetween(git, before, after))
+                            // Дифф не посчитан — перечитывать нечего назвать;
+                            // сам pull при этом успешен.
+                            PullResult.Updated(changedPathsBetween(git, before, after).orEmpty())
                         }
                     }
                 }
@@ -374,12 +399,25 @@ class JGitSync(
         }
     }
 
-    /** Участки конфликта файла (`FR-23`): читаем текст, разбирает общий код. */
-    override suspend fun conflictHunks(path: String): List<ConflictHunk> = withContext(io) {
-        val dir = firstRepositoryDir() ?: return@withContext emptyList()
-        val file = File(dir, path)
-        if (!file.isFile) return@withContext emptyList()
-        parseConflictFile(file.readText()).hunks
+    /**
+     * Текст конфликтного файла (`FR-23`); разбирает общий код.
+     *
+     * Путь проходит те же рубежи, что и мост редактора
+     * ([resolveInsideWorkTree]): содержимое клона задаёт автор remote, и
+     * pull — ровно тот случай, при котором аналитика обещала пересмотр
+     * рубежей (находка ревью E3).
+     */
+    override suspend fun conflictedText(path: String): String? = withContext(io) {
+        val dir = firstRepositoryDir() ?: return@withContext null
+        val file = resolveInsideWorkTree(dir, path) ?: return@withContext null
+        // Строгий UTF-8, как в мосте редактора: readText() заменяет непонятые
+        // байты на U+FFFD, и переписанный файл в windows-1251 уехал бы в
+        // merge-коммит мусором (блокер ревью E3).
+        try {
+            file.readBytes().decodeToString(throwOnInvalidSequence = true)
+        } catch (_: CharacterCodingException) {
+            null
+        }
     }
 
     /** Записать разрешённый текст и снять конфликт с файла в индексе (`FR-23`). */
@@ -387,12 +425,34 @@ class JGitSync(
         withContext(io) {
             val dir = firstRepositoryDir()
                 ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+            // Сторож результата — независимо от модели экрана: текст с
+            // маркерами не пишется и не стейджится (регрессия ревью E3).
+            if (containsConflictMarkers(resolvedText)) {
+                return@withContext CommitResult.Failed(GitCommitError.MarkersLeft)
+            }
             try {
                 Git.open(dir).use { git ->
-                    // Перевод строки в конце: файл без него Git считает
-                    // изменённым при каждом сравнении.
-                    val text = if (resolvedText.endsWith("\n")) resolvedText else resolvedText + "\n"
-                    File(dir, path).writeText(text)
+                    // Путь проверяется теми же рубежами, что при чтении:
+                    // запись опаснее чтения, и симлинк из чужого репозитория
+                    // писал бы за пределы копии (находка ревью E3).
+                    val file = resolveInsideWorkTree(dir, path)
+                        ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+                    // Текст пишется дословно: переводы строк и хвостовой
+                    // перевод восстановил общий код (ConflictFile), дописывать
+                    // здесь ещё один значит править чужой файл (NFR-6).
+                    // Через временный файл: обрыв записи иначе оставил бы
+                    // половину файла с уже снятым конфликтом (ревью E3).
+                    val tmp = File(file.parentFile, file.name + TEMP_SUFFIX)
+                    try {
+                        tmp.writeBytes(resolvedText.encodeToByteArray())
+                        if (!tmp.renameTo(file)) {
+                            return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+                        }
+                    } finally {
+                        // Осиротевший временный файл попал бы в список экрана
+                        // коммита и мог быть закоммичен (находка ревью E3).
+                        if (tmp.exists()) tmp.delete()
+                    }
                     // add снимает пометку конфликта — это и есть `git add`
                     // при разрешении: стадии заменяются одной записью.
                     git.add().addFilepattern(path).call()
@@ -430,23 +490,96 @@ class JGitSync(
 
     /**
      * Отмена слияния (`FR-25`, `TC-26`): рабочая копия и индекс возвращаются
-     * к состоянию до pull. `reset --hard HEAD` — то же, что делает
-     * `git merge --abort` для остановленного merge: HEAD не двигался, значит
-     * локальные коммиты целы.
+     * к состоянию до pull.
+     *
+     * Откатываются *только файлы слияния* — те, что принесла чужая сторона
+     * (дифф от базы слияния к `MERGE_HEAD`), плюс конфликтные. Из-за решения
+     * `OQ-4` перед pull на диск записываются правки открытого документа, и
+     * сброс рабочей копии целиком стирал бы работу пользователя.
+     * Реализация не использует `reset --merge`: на конфликтном индексе JGit
+     * его не выполняет — восстановление идёт по шагам, см. ниже.
+     *
+     * Порядок шагов — не косметика, а восстановимость (блокер ревью E3):
+     *
+     * . Убедиться, что слияние вообще идёт (`MERGE_HEAD` на месте). Иначе —
+     *   отказ `MergeNotInProgress`: раньше метод рапортовал успех, ничего не
+     *   сделав, и файл с маркерами уезжал в историю следующим коммитом.
+     * . Собрать пути слияния *до* любых изменений: конфликтные, staged-правки,
+     *   добавления и удаления (`removed`) — без последних отмена оставляла
+     *   удаление, которого пользователь не делал. Правки рабочей копии
+     *   (`modified`, `untracked`) в набор не входят: это работа пользователя,
+     *   и трогать её нельзя.
+     * . Восстановить содержимое из `HEAD`, удалив то, чего в `HEAD` нет.
+     * . И только последним шагом — `reset`, который в JGit 7.7 сам снимает
+     *   `MERGE_HEAD` (`ResetCommand.call()` → `resetMerge()` для любого
+     *   режима, кроме `SOFT`). Поэтому упавший шаг восстановления оставляет
+     *   слияние размеченным, и повтор отмены работает.
      */
     override suspend fun abortMerge(): CommitResult = withContext(io) {
         val dir = firstRepositoryDir()
             ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
         try {
             Git.open(dir).use { git ->
-                git.repository.writeMergeHeads(null)
-                git.repository.writeMergeCommitMsg(null)
-                git.reset().setMode(ResetCommand.ResetType.HARD).setRef(HEAD).call()
+                val mergeHeads = git.repository.readMergeHeads().orEmpty()
+                if (mergeHeads.isEmpty()) {
+                    return@withContext CommitResult.Failed(GitCommitError.MergeNotInProgress)
+                }
+
+                val status = git.status().call()
+                // Пути слияния = то, что принесла ЧУЖАЯ сторона: дифф от базы
+                // слияния к MERGE_HEAD. Дифф «HEAD против MERGE_HEAD» для этого
+                // не годится — он включает файлы, изменённые только локально.
+                // Второй рубеж — пересечение с индексом ниже: правка, лежащая
+                // лишь в рабочей копии, в набор не попадает в любом случае.
+                val broughtByMerge = mutableSetOf<String>()
+                for (head in mergeHeads) {
+                    val base = mergeBaseOf(git, git.repository.resolve(HEAD), head)
+                    val paths = changedPathsBetween(git, base, head)
+                        ?: return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+                    broughtByMerge += paths
+                }
+                val mergePaths = (
+                    status.conflicting +
+                        (status.changed + status.added + status.removed).filter { it in broughtByMerge }
+                    ).toSortedSet()
+
+                // Файлы, которых в HEAD нет, checkout не вернёт — их принесло
+                // слияние, и уйти они должны вместе с ним.
+                val headTree = git.repository.resolve(HEAD_TREE)
+                val (inHead, notInHead) = mergePaths.partition { path ->
+                    headTree != null && existsInTree(git, headTree, path)
+                }
+
+                if (inHead.isNotEmpty()) {
+                    val checkout = git.checkout().setStartPoint(HEAD).setForced(true)
+                    inHead.forEach { checkout.addPath(it) }
+                    checkout.call()
+                }
+                // Неудача удаления не проглатывается: reset снял бы признак
+                // слияния, и повтором отмены состояние уже не восстановить —
+                // KDoc обещает восстановимость (находка ревью E3).
+                val undeleted = notInHead.filter { path ->
+                    val file = File(dir, path)
+                    file.exists() && !(resolveInsideWorkTree(dir, path)?.delete() ?: false)
+                }
+                if (undeleted.isNotEmpty()) {
+                    return@withContext CommitResult.Failed(GitCommitError.CommitFailed)
+                }
+
+                // Reset последним: он же снимает MERGE_HEAD и сообщение.
+                git.reset().setMode(ResetCommand.ResetType.MIXED).setRef(HEAD).call()
                 CommitResult.Committed
             }
         } catch (e: Exception) {
             CommitResult.Failed(commitErrorOf(e))
         }
+    }
+
+    /** Есть ли путь в дереве коммита — отличает «вернуть» от «удалить». */
+    private fun existsInTree(git: Git, tree: ObjectId, path: String): Boolean = try {
+        org.eclipse.jgit.treewalk.TreeWalk.forPath(git.repository, path, tree)?.use { true } ?: false
+    } catch (_: Exception) {
+        false
     }
 
     /**
@@ -463,9 +596,17 @@ class JGitSync(
         lock.isFile && lock.delete()
     }
 
-    /** Пути, изменившиеся между двумя состояниями HEAD (`FR-15`). */
-    private fun changedPathsBetween(git: Git, before: ObjectId?, after: ObjectId?): List<String> {
-        if (before == null || after == null) return emptyList()
+    /**
+     * Пути, изменившиеся между двумя коммитами (`FR-15`); `null` — дифф не
+     * посчитан.
+     *
+     * Отличать «изменений нет» от «посчитать не удалось» обязательно: пустой
+     * список на ошибке схлопывал набор отмены до конфликтных путей, отмена
+     * проходила частично и рапортовала успех — тот же класс ложного успеха,
+     * который чинился раундом раньше (замечание независимой проверки).
+     */
+    private fun changedPathsBetween(git: Git, before: ObjectId?, after: ObjectId?): List<String>? {
+        if (before == null || after == null) return null
         val repo = git.repository
         return try {
             repo.newObjectReader().use { reader ->
@@ -481,7 +622,64 @@ class JGitSync(
                     .sorted()
             }
         } catch (_: Exception) {
-            emptyList()
+            null
+        }
+    }
+
+    /**
+     * База слияния двух вершин; `null` — не нашлась (несвязанные истории).
+     * По ней считается, что принесла чужая сторона.
+     */
+    private fun mergeBaseOf(git: Git, ours: ObjectId?, theirs: ObjectId?): ObjectId? {
+        if (ours == null || theirs == null) return null
+        return try {
+            RevWalk(git.repository).use { walk ->
+                walk.revFilter = RevFilter.MERGE_BASE
+                walk.markStart(walk.parseCommit(ours))
+                walk.markStart(walk.parseCommit(theirs))
+                walk.next()?.id
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Файл внутри рабочей копии или `null`.
+     *
+     * Три независимых рубежа, как в мосте редактора (`RepoDocumentAccess`):
+     * имена сегментов (пустые, `.`/`..`, разделители, `.git` в любом
+     * регистре), NOFOLLOW-проход (ни один сегмент не смеет быть символьной
+     * ссылкой) и канонический путь под корнем копии. Содержимое клона —
+     * недоверенный вход, и конфликтные файлы им приходят наравне с прочими.
+     */
+    private fun resolveInsideWorkTree(workTree: File, relativePath: String): File? {
+        val segments = relativePath.split('/')
+        if (segments.any { !isSafeDirectoryName(it) }) return null
+        if (segments.any { it.equals(GIT_DIR, ignoreCase = true) }) return null
+
+        var current = workTree
+        var attributes: java.nio.file.attribute.BasicFileAttributes? = null
+        for (segment in segments) {
+            current = File(current, segment)
+            attributes = try {
+                java.nio.file.Files.readAttributes(
+                    current.toPath(),
+                    java.nio.file.attribute.BasicFileAttributes::class.java,
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS,
+                )
+            } catch (_: java.io.IOException) {
+                return null
+            }
+            if (attributes.isSymbolicLink) return null
+        }
+        if (attributes?.isRegularFile != true) return null
+
+        return try {
+            val root = workTree.canonicalFile.toPath()
+            current.takeIf { it.canonicalFile.toPath().startsWith(root) }
+        } catch (_: java.io.IOException) {
+            null
         }
     }
 
@@ -693,7 +891,9 @@ class JGitSync(
         const val DEV_NULL = "/dev/null"
         const val USER_SECTION = "user"
         const val ORIGIN = "origin"
+        const val TEMP_SUFFIX = ".adocmobile-tmp"
         const val HEAD = "HEAD"
+        const val HEAD_TREE = "HEAD^{tree}"
     }
 }
 

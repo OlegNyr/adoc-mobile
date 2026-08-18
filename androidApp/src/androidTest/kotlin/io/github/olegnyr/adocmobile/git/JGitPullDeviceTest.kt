@@ -9,9 +9,15 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import io.github.olegnyr.adocmobile.screen.git.ConflictScreenModel
+import io.github.olegnyr.adocmobile.screen.git.ConflictScreenPhase
 import org.eclipse.jgit.api.Git
 
 /**
@@ -142,10 +148,14 @@ class JGitPullDeviceTest {
         val conflicted = assertIs<PullResult.Conflicted>(result, "конфликт — исход, не ошибка (TC-21)")
         assertEquals(listOf("readme.adoc"), conflicted.paths)
 
-        val hunks = runBlocking { sync().conflictHunks("readme.adoc") }
-        assertEquals(1, hunks.size, "участок разобран общим кодом (FR-23)")
-        assertTrue(hunks.single().ours.any { "Наша" in it }, "локальная сторона — наша версия")
-        assertTrue(hunks.single().theirs.any { "Их" in it }, "удалённая сторона — версия origin")
+        val text = assertNotNull(
+            runBlocking { sync().conflictedText("readme.adoc") },
+            "шов отдаёт текст конфликтного файла целиком",
+        )
+        val parsed = assertIs<ConflictParseResult.Parsed>(parseConflictFile(text)).file
+        assertEquals(1, parsed.hunks.size, "участок разобран общим кодом (FR-23)")
+        assertTrue(parsed.hunks.single().oursText().any { "Наша" in it }, "локальная сторона — наша версия")
+        assertTrue(parsed.hunks.single().theirsText().any { "Их" in it }, "удалённая сторона — версия origin")
     }
 
     @Test
@@ -158,19 +168,32 @@ class JGitPullDeviceTest {
         }
         runBlocking { sync().pull() }
 
-        val hunks = runBlocking { sync().conflictHunks("readme.adoc") }
-        val resolvedText = parseConflictFile(File(workTree, "readme.adoc").readText())
-            .resolvedText(List(hunks.size) { ConflictChoice.Theirs })
-
-        runBlocking {
-            assertIs<CommitResult.Committed>(sync().resolveConflict("readme.adoc", resolvedText))
-            assertIs<CommitResult.Committed>(sync().finishMerge(author))
+        // Через продуктовый путь целиком: модель экрана читает файл швом,
+        // разбирает, собирает и пишет. Прежний кейс звал parseConflictFile
+        // сам и потому маскировал блокер (ревью E3).
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        // Шов на Unconfined: модель зовёт suspend-методы, и с Dispatchers.IO
+        // тест проверял бы состояние раньше, чем оно появится. Клон здесь не
+        // делается, а для чтения и записи однопоточность безопасна.
+        val model = ConflictScreenModel(
+            sync = JGitSync(reposRoot = root, io = Dispatchers.Unconfined),
+            path = "readme.adoc",
+            scope = scope,
+        )
+        model.start()
+        assertTrue(model.hunks.isNotEmpty(), "участки прочитаны швом и разобраны")
+        repeat(model.hunks.size) { index ->
+            model.choose(ConflictChoice.Theirs)
+            if (index < model.hunks.lastIndex) model.nextHunk()
         }
+        model.finishRequested(author)
+        assertIs<ConflictScreenPhase.Merged>(model.phase, "слияние завершено через модель экрана")
 
         val status = runBlocking { sync().status() }!!
         assertEquals(0, status.changeCount, "после слияния рабочая копия чиста (TC-25)")
         val text = File(workTree, "readme.adoc").readText()
         assertTrue("Их версия." in text, "выбранная сторона легла в файл")
+        assertTrue("= Репозиторий" in text, "неконфликтный текст файла сохранён (TC-42, блокер ревью E3)")
         assertTrue(
             listOf("<<<<<<<", "=======", ">>>>>>>").none { it in text },
             "маркеров конфликта в файле не осталось (TC-25)",
@@ -204,6 +227,240 @@ class JGitPullDeviceTest {
             "рабочая копия — наша версия без маркеров (TC-26)",
         )
         assertEquals(0, runBlocking { sync().status() }!!.changeCount, "состояние согласовано")
+    }
+
+    @Test
+    fun TC_26_abortKeepsUncommittedWorkInOtherFiles() {
+        // Штатный сценарий из-за OQ-4: перед pull приложение записывает
+        // правки открытого документа на диск некоммитнутыми.
+        pushFromSeed("readme.adoc", "= Репозиторий\n\nИх версия.\n", "их правка")
+        File(workTree, "readme.adoc").writeText("= Репозиторий\n\nНаша версия.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("readme.adoc").call()
+            commit(git, "наша правка")
+        }
+        // Файл ОТСЛЕЖИВАЕМЫЙ и изменён без коммита — именно этот случай уносил
+        // reset --hard. Нетрекаемый файл его бы и не заметил (ревью E3).
+        File(workTree, "заметка.adoc").writeText("= Заметка\n\nБаза.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("заметка.adoc").call()
+            commit(git, "заметка в истории")
+        }
+        File(workTree, "заметка.adoc").writeText("= Заметка\n\nНесохранённая работа.\n")
+        runBlocking { sync().pull() }
+
+        runBlocking { assertIs<CommitResult.Committed>(sync().abortMerge()) }
+
+        assertEquals(
+            "= Заметка\n\nНесохранённая работа.\n",
+            File(workTree, "заметка.adoc").readText(),
+            "отмена слияния не стирает правки вне слияния (блокер ревью E3, reset --merge)",
+        )
+    }
+
+    @Test
+    fun TC_46_abortWithoutMergeInProgressIsRefusedNotFalselyReported() {
+        // Ложный успех уводил файл с маркерами в историю следующим коммитом.
+        val result = runBlocking { sync().abortMerge() }
+
+        val failed = assertIs<CommitResult.Failed>(result, "слияния нет — отменять нечего")
+        assertEquals(GitCommitError.MergeNotInProgress, failed.error)
+    }
+
+    @Test
+    fun TC_46_abortRestoresFileDeletedByTheMerge() {
+        // origin удалил файл, локально он не менялся, конфликт в другом файле.
+        Git.open(seed).use { git ->
+            File(seed, "удаляемый.adoc").writeText("= Удаляемый\n")
+            git.add().addFilepattern("удаляемый.adoc").call()
+            commit(git, "добавили файл")
+            git.push().setRemote(remoteUri).add("refs/heads/main").call()
+        }
+        runBlocking { sync().pull() }
+        assertTrue(File(workTree, "удаляемый.adoc").isFile, "файл приехал в копию")
+
+        Git.open(seed).use { git ->
+            File(seed, "удаляемый.adoc").delete()
+            git.rm().addFilepattern("удаляемый.adoc").call()
+            File(seed, "readme.adoc").writeText("= Репозиторий\n\nИх версия.\n")
+            git.add().addFilepattern("readme.adoc").call()
+            commit(git, "удалили файл и правка")
+            git.push().setRemote(remoteUri).add("refs/heads/main").call()
+        }
+        File(workTree, "readme.adoc").writeText("= Репозиторий\n\nНаша версия.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("readme.adoc").call()
+            commit(git, "наша правка")
+        }
+        runBlocking { sync().pull() }
+
+        runBlocking { assertIs<CommitResult.Committed>(sync().abortMerge()) }
+
+        assertTrue(
+            File(workTree, "удаляемый.adoc").isFile,
+            "отмена вернула файл, удалённый слиянием (блокер ревью E3)",
+        )
+        assertEquals(0, runBlocking { sync().status() }!!.changeCount, "состояние согласовано")
+    }
+
+    @Test
+    fun TC_47_conflictSeamRefusesEscapesSymlinksAndNonUtf8() {
+        // Свой кейс рубежей: прежде работа приписывалась кейсу про мост
+        // документов, который про конфликтный шов ничего не говорит.
+        assertNull(runBlocking { sync().conflictedText("../побег.adoc") }, "выход за копию отвергнут")
+        assertNull(runBlocking { sync().conflictedText(".git/config") }, "служебный каталог закрыт")
+        assertIs<CommitResult.Failed>(
+            runBlocking { sync().resolveConflict("../побег.adoc", "текст") },
+            "запись за пределы копии отвергнута",
+        )
+
+        // Симлинк наружу — рубеж NOFOLLOW.
+        val secret = File(filesDir, "devicetest-pull-secret.txt")
+        secret.writeText("секрет вне копии")
+        val link = File(workTree, "ссылка.adoc")
+        try {
+            android.system.Os.symlink(secret.absolutePath, link.absolutePath)
+            assertNull(runBlocking { sync().conflictedText("ссылка.adoc") }, "чтение по симлинку отвергнуто")
+            assertIs<CommitResult.Failed>(
+                runBlocking { sync().resolveConflict("ссылка.adoc", "перезапись") },
+                "запись по симлинку отвергнута",
+            )
+            assertEquals("секрет вне копии", secret.readText(), "файл за копией не тронут")
+        } finally {
+            link.delete()
+            secret.delete()
+        }
+
+        // Не-UTF-8: readText() заменил бы байты на U+FFFD и закоммитил мусор.
+        val cp1251 = File(workTree, "кириллица.adoc")
+        cp1251.writeBytes(byteArrayOf(0xCF.toByte(), 0xF0.toByte(), 0xE8.toByte(), 0xE2.toByte(), 0xE5.toByte(), 0xF2.toByte()))
+        assertNull(
+            runBlocking { sync().conflictedText("кириллица.adoc") },
+            "файл не в UTF-8 не читается — переписать его значит испортить (блокер ревью E3)",
+        )
+        cp1251.delete()
+    }
+
+    @Test
+    fun TC_48_seamRefusesTextWithMarkersOnItsOwn() {
+        // Сторож шва — независимо от модели экрана: половина «проверка в
+        // модели и в шве» прежде держалась на чтении кода (замечание
+        // независимой проверки), подделка шва сторожа не воспроизводит.
+        pushFromSeed("readme.adoc", "= Репозиторий\n\nИх версия.\n", "их правка")
+        File(workTree, "readme.adoc").writeText("= Репозиторий\n\nНаша версия.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("readme.adoc").call()
+            commit(git, "наша правка")
+        }
+        runBlocking { sync().pull() }
+
+        val withMarkers = "= Репозиторий\n\n<<<<<<< HEAD\nнаша\n=======\nих\n>>>>>>> origin/main\n"
+        val result = runBlocking { sync().resolveConflict("readme.adoc", withMarkers) }
+
+        val failed = assertIs<CommitResult.Failed>(result, "шов сам отвергает текст с маркерами")
+        assertEquals(GitCommitError.MarkersLeft, failed.error)
+        assertTrue(
+            "<<<<<<<" in File(workTree, "readme.adoc").readText(),
+            "файл не переписан — на диске остался конфликтный оригинал",
+        )
+    }
+
+    @Test
+    fun TC_48_asciidocWithNestedExampleBlockCanBeResolvedAndMerged() {
+        // Блокер независимой проверки: сторож считал маркером любой ряд «=»,
+        // и на легальном AsciiDoc пользователь навсегда получал отказ.
+        // Здесь путь идёт целиком: pull → модель → шов → merge-коммит.
+        val withExample = listOf(
+            "= Документ",
+            "",
+            "[NOTE]",
+            "====",
+            "Внешний блок.",
+            "",
+            "=======",
+            "Вложенный блок.",
+            "=======",
+            "====",
+            "",
+        ).joinToString("\n")
+
+        Git.open(seed).use { git ->
+            File(seed, "пример.adoc").writeText(withExample + "Их версия.\n")
+            git.add().addFilepattern("пример.adoc").call()
+            commit(git, "их правка примера")
+            git.push().setRemote(remoteUri).add("refs/heads/main").call()
+        }
+        File(workTree, "пример.adoc").writeText(withExample + "Наша версия.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("пример.adoc").call()
+            commit(git, "наша правка примера")
+        }
+        assertIs<PullResult.Conflicted>(runBlocking { sync().pull() })
+
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val model = ConflictScreenModel(
+            sync = JGitSync(reposRoot = root, io = Dispatchers.Unconfined),
+            path = "пример.adoc",
+            scope = scope,
+        )
+        model.start()
+        assertTrue(model.hunks.isNotEmpty(), "участок разобран, несмотря на «=======» в тексте")
+        repeat(model.hunks.size) { index ->
+            model.choose(ConflictChoice.Ours)
+            if (index < model.hunks.lastIndex) model.nextHunk()
+        }
+        model.finishRequested(author)
+
+        assertIs<ConflictScreenPhase.Merged>(
+            model.phase,
+            "легальный AsciiDoc с вложенным example-блоком доходит до merge-коммита, а не упирается в сторож",
+        )
+        val text = File(workTree, "пример.adoc").readText()
+        assertTrue("Вложенный блок." in text, "вложенный блок остался в файле")
+        assertTrue("Наша версия." in text, "выбранная сторона применена")
+        assertEquals(0, runBlocking { sync().status() }!!.changeCount, "рабочая копия чиста после слияния")
+    }
+
+    @Test
+    fun TC_49_abortKeepsLocalWorkThatMergeDidNotBring() {
+        // Файл изменён локальным коммитом (значит различается между HEAD и
+        // MERGE_HEAD — прежний набор его включал), а поверх лежит
+        // несохранённая в истории правка. Отмена не должна её трогать: чужая
+        // сторона этот файл не приносила.
+        Git.open(seed).use { git ->
+            File(seed, "локальный.adoc").writeText("= Локальный\n\nБаза.\n")
+            git.add().addFilepattern("локальный.adoc").call()
+            commit(git, "база локального файла")
+            git.push().setRemote(remoteUri).add("refs/heads/main").call()
+        }
+        runBlocking { sync().pull() }
+
+        File(workTree, "локальный.adoc").writeText("= Локальный\n\nНаша закоммиченная версия.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("локальный.adoc").call()
+            commit(git, "наша правка локального файла")
+        }
+
+        pushFromSeed("readme.adoc", "= Репозиторий\n\nИх версия.\n", "их правка")
+        File(workTree, "readme.adoc").writeText("= Репозиторий\n\nНаша версия.\n")
+        Git.open(workTree).use { git ->
+            git.add().addFilepattern("readme.adoc").call()
+            commit(git, "наша правка readme")
+        }
+
+        // Правка в рабочей копии, не в индексе: с застейдженной JGit вовсе
+        // отказывается начинать слияние (выяснено пробой на устройстве), и
+        // сценарий рецензента живьём не воспроизводится — записано в журнале.
+        File(workTree, "локальный.adoc").writeText("= Локальный\n\nНесохранённая работа.\n")
+
+        runBlocking { sync().pull() }
+        runBlocking { assertIs<CommitResult.Committed>(sync().abortMerge()) }
+
+        assertEquals(
+            "= Локальный\n\nНесохранённая работа.\n",
+            File(workTree, "локальный.adoc").readText(),
+            "правка в файле, которого слияние не приносило, пережила отмену",
+        )
     }
 
     @Test

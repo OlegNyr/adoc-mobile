@@ -27,12 +27,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import io.github.olegnyr.adocmobile.git.CommitAuthor
 import io.github.olegnyr.adocmobile.git.ConflictChoice
 import io.github.olegnyr.adocmobile.git.ConflictHunk
 import io.github.olegnyr.adocmobile.theme.AdocTheme
 import io.github.olegnyr.adocmobile.theme.AdocTypography
 import io.github.olegnyr.adocmobile.theme.adocTextStyle
+import io.github.olegnyr.adocmobile.ui.AdocBlueprintBlock
 
 /**
  * Экран слияния — макет «04» (`FR-23`…`FR-25`).
@@ -98,13 +101,13 @@ fun ConflictScreen(
                     SideBlock(
                         label = "ЛОКАЛЬНО · " + (hunk.oursLabel ?: "HEAD"),
                         labelColor = AdocTheme.colors.accentText,
-                        lines = hunk.ours,
+                        lines = hunk.oursText(),
                         selected = choice == ConflictChoice.Ours || choice == ConflictChoice.Both,
                     )
                     SideBlock(
                         label = (hunk.theirsLabel ?: "ORIGIN").uppercase(),
                         labelColor = AdocTheme.colors.accentSecondary,
-                        lines = hunk.theirs,
+                        lines = hunk.theirsText(),
                         selected = choice == ConflictChoice.Theirs || choice == ConflictChoice.Both,
                     )
                 }
@@ -133,10 +136,75 @@ fun ConflictScreen(
                 choice = choice,
                 allResolved = model.allResolved,
                 isLastHunk = model.currentIndex >= model.hunks.lastIndex,
+                enabled = phase is ConflictScreenPhase.Resolving,
                 onChoose = model::choose,
                 onNext = model::nextHunk,
                 onFinish = { model.finishRequested(author) },
             )
+        }
+    }
+
+    // Отмена слияния отбрасывает работу — спрашиваем подтверждение (FR-25,
+    // находка ревью E3: крестик читается как «закрыть», а не «отменить всё»).
+    if (phase is ConflictScreenPhase.ConfirmingAbort) {
+        AbortConfirmation(onConfirm = model::abortConfirmed, onDismiss = model::abortDismissed)
+    }
+}
+
+/** Подтверждение отмены слияния — чертёжный блок поверх экрана. */
+@Composable
+private fun AbortConfirmation(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    Popup(
+        alignment = Alignment.Center,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Box(modifier = Modifier.padding(24.dp)) {
+            AdocBlueprintBlock(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "ОТМЕНИТЬ СЛИЯНИЕ",
+                    style = adocTextStyle(AdocTypography.sectionLabel),
+                    color = AdocTheme.colors.textFaint,
+                )
+                Text(
+                    text = "Забранные правки будут отброшены, репозиторий вернётся к состоянию до pull. " +
+                        "Ваши коммиты и сохранённые правки в других файлах останутся.",
+                    style = adocTextStyle(AdocTypography.body),
+                    color = AdocTheme.colors.textSecondary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 14.dp),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .border(1.dp, AdocTheme.colors.borderObject)
+                            .clickable(role = Role.Button, onClick = onDismiss),
+                    ) {
+                        Text(
+                            text = "ПРОДОЛЖИТЬ СЛИЯНИЕ",
+                            style = adocTextStyle(AdocTypography.buttonLabel),
+                            color = AdocTheme.colors.textSecondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp),
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .background(AdocTheme.colors.accent)
+                            .clickable(role = Role.Button, onClick = onConfirm),
+                    ) {
+                        Text(
+                            text = "ОТМЕНИТЬ",
+                            style = adocTextStyle(AdocTypography.buttonLabel),
+                            color = AdocTheme.colors.onAccent,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -253,6 +321,7 @@ private fun ActionBar(
     choice: ConflictChoice?,
     allResolved: Boolean,
     isLastHunk: Boolean,
+    enabled: Boolean,
     onChoose: (ConflictChoice) -> Unit,
     onNext: () -> Unit,
     onFinish: () -> Unit,
@@ -265,26 +334,26 @@ private fun ActionBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ChoiceCell("ЛОКАЛЬНОЕ", choice == ConflictChoice.Ours, Modifier.weight(1f)) {
+        ChoiceCell("ЛОКАЛЬНОЕ", choice == ConflictChoice.Ours, enabled, Modifier.weight(1f)) {
             onChoose(ConflictChoice.Ours)
         }
-        ChoiceCell("УДАЛЁННОЕ", choice == ConflictChoice.Theirs, Modifier.weight(1f)) {
+        ChoiceCell("УДАЛЁННОЕ", choice == ConflictChoice.Theirs, enabled, Modifier.weight(1f)) {
             onChoose(ConflictChoice.Theirs)
         }
-        ChoiceCell("ОБА", choice == ConflictChoice.Both, Modifier.weight(1f)) {
+        ChoiceCell("ОБА", choice == ConflictChoice.Both, enabled, Modifier.weight(1f)) {
             onChoose(ConflictChoice.Both)
         }
 
         // На последнем участке кнопка становится завершением слияния и
         // доступна только когда разрешены все участки (FR-24).
         val finishing = isLastHunk
-        val enabled = if (finishing) allResolved else choice != null
+        val actionEnabled = enabled && if (finishing) allResolved else choice != null
         Box(
             modifier = Modifier
                 .height(46.dp)
-                .background(if (enabled) AdocTheme.colors.accent else AdocTheme.colors.accentTrack)
+                .background(if (actionEnabled) AdocTheme.colors.accent else AdocTheme.colors.accentTrack)
                 .clickable(
-                    enabled = enabled,
+                    enabled = actionEnabled,
                     role = Role.Button,
                     onClick = if (finishing) onFinish else onNext,
                 ),
@@ -292,7 +361,7 @@ private fun ActionBar(
             Text(
                 text = if (finishing) "ЗАВЕРШИТЬ" else "ДАЛЕЕ",
                 style = adocTextStyle(AdocTypography.buttonLabel),
-                color = if (enabled) AdocTheme.colors.onAccent else AdocTheme.colors.textMuted,
+                color = if (actionEnabled) AdocTheme.colors.onAccent else AdocTheme.colors.textMuted,
                 modifier = Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
             )
         }
@@ -303,6 +372,7 @@ private fun ActionBar(
 private fun ChoiceCell(
     label: String,
     selected: Boolean,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -311,7 +381,7 @@ private fun ChoiceCell(
             .height(46.dp)
             .background(if (selected) AdocTheme.colors.accentSelection else AdocTheme.colors.ground)
             .border(1.dp, if (selected) AdocTheme.colors.accent else AdocTheme.colors.borderObject)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
     ) {
         Text(
             text = label,

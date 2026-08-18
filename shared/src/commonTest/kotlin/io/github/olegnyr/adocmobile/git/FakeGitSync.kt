@@ -116,16 +116,20 @@ class FakeGitSync : GitSync {
         return pullResult
     }
 
-    /** Участки конфликта по путям — ответ [conflictHunks]. */
-    var hunks: Map<String, List<ConflictHunk>> = emptyMap()
+    /** Тексты конфликтных файлов по путям — ответ [conflictedText]. */
+    var conflictedTexts: Map<String, String> = emptyMap()
 
-    override suspend fun conflictHunks(path: String): List<ConflictHunk> = hunks[path].orEmpty()
+    override suspend fun conflictedText(path: String): String? = conflictedTexts[path]
 
     /** Разрешённые файлы: путь → записанный текст. */
     val resolved = mutableMapOf<String, String>()
     var resolveResult: CommitResult = CommitResult.Committed
 
+    /** Ворота перед записью разрешённого файла — для тестов гонки (TC-45). */
+    var beforeResolve: (suspend () -> Unit)? = null
+
     override suspend fun resolveConflict(path: String, resolvedText: String): CommitResult {
+        beforeResolve?.invoke()
         if (resolveResult is CommitResult.Committed) resolved[path] = resolvedText
         return resolveResult
     }
