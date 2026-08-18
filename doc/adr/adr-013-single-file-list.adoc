@@ -1,6 +1,6 @@
-= ADR-002: Один список файлов над двумя источниками
+= ADR-013: Один список файлов над двумя источниками
 // adr-status: proposed | accepted | superseded
-:adr-status: proposed
+:adr-status: accepted
 :date: 2026-08-18
 :feature: 009-app-navigation
 :sectanchors:
