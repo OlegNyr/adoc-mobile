@@ -1,7 +1,7 @@
 = План работ — диаграммы через Kroki
 :feature: 008-diagrams
 // plan-status: draft | active | done
-:plan-status: draft
+:plan-status: active
 :updated: 2026-08-18
 :horizon: E1 подробно, E2 намечен, E3 и E4 крупными мазками
 :toc: macro
