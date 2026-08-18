@@ -240,8 +240,6 @@ internal object QuickJsAdocRenderer : AdocRenderer {
     internal var krokiAvailable: Boolean = false
         private set
 
-    override suspend fun render(source: String): String = render(source, DiagramOptions.Disabled)
-
     override suspend fun render(source: String, diagrams: DiagramOptions): String = turn.withLock {
         val literal = jsonStringLiteral(source)
         // Адрес сервера пересекает границу с JS тем же способом, что документ

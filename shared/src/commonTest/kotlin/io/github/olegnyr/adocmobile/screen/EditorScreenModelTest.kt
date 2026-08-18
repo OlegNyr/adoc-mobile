@@ -16,6 +16,7 @@ import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.document.openDocument
 import io.github.olegnyr.adocmobile.preview.PreviewStatus
 import io.github.olegnyr.adocmobile.render.AdocRenderer
+import io.github.olegnyr.adocmobile.render.DiagramOptions
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -720,11 +721,19 @@ class EditorScreenModelTest {
     private fun EditorScreenModel.openRunnerPreview() =
         assertIs<EditorDocument.Open>(document).preview
 
-    /** Рендерер-подделка: считает запросы; исполнителя проверяет `PreviewPipelineTest`. */
+    /**
+     * Рендерер-подделка: считает запросы; исполнителя проверяет `PreviewPipelineTest`.
+     *
+     * Переопределяется двухаргументная форма — обязательная с решения `OQ-10`
+     * фичи 008. Диаграммы подделке безразличны, а вот безразличие приходится
+     * писать явно: иначе реализация, которая о них забыла, молча отдавала бы
+     * документ без диаграмм.
+     */
     private class FakeRenderer : AdocRenderer {
         val requests = mutableListOf<String>()
 
-        override suspend fun render(source: String): String = "HTML($source)".also { requests += source }
+        override suspend fun render(source: String, diagrams: DiagramOptions): String =
+            "HTML($source)".also { requests += source }
     }
 
     /** Шов-подделка по образцу `AutosaveRunnerTest`: содержимое и исходы задаются тестом. */

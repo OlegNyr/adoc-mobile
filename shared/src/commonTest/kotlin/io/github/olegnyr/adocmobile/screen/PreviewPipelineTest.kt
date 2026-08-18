@@ -3,6 +3,7 @@ package io.github.olegnyr.adocmobile.screen
 import io.github.olegnyr.adocmobile.preview.PreviewPolicy
 import io.github.olegnyr.adocmobile.preview.PreviewStatus
 import io.github.olegnyr.adocmobile.render.AdocRenderer
+import io.github.olegnyr.adocmobile.render.DiagramOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -183,14 +184,20 @@ class PreviewPipelineTest {
         assertEquals("<page>HTML(= Починенный)</page>", pipeline.html)
     }
 
-    /** Рендерер-подделка: запросы копятся, исход задаётся тестом, отмена считается. */
+    /**
+     * Рендерер-подделка: запросы копятся, исход задаётся тестом, отмена считается.
+     *
+     * Переопределяется двухаргументная форма — обязательная с решения `OQ-10`
+     * фичи 008. Пайплайн диаграмм пока не передаёт (это `SL-6` фичи 008), но
+     * контракт требует именно её.
+     */
     private class FakeRenderer : AdocRenderer {
         val requests = mutableListOf<String>()
         var failure: Throwable? = null
         var gate: CompletableDeferred<String>? = null
         var cancelled = 0
 
-        override suspend fun render(source: String): String {
+        override suspend fun render(source: String, diagrams: DiagramOptions): String {
             requests += source
             failure?.let { throw it }
             gate?.let { gate ->

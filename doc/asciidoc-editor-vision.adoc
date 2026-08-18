@@ -129,7 +129,7 @@ UI (commonMain, Compose Multiplatform)::
 ====
 
 Рендер (expect/actual)::
-Интерфейс: `suspend fun render(source: String): String` — AsciiDoc на входе, HTML на выходе.
+Интерфейс: `suspend fun render(source: String, diagrams: DiagramOptions): String` — AsciiDoc на входе, HTML на выходе; вторым параметром идёт режим диаграмм, потому что он меняется пользователем, а движок живёт один на процесс.
 +
 --
 * *Движок:* QuickJS через KMP-обёртку с корутинным API. V8-варианты (Javet, J2V8) отвергнуты: их потоковая модель несовместима с корутинами — документация Javet прямо предупреждает о падении JVM при вызове из корутины, — и они добавляют 12–25 МБ на ABI против 0,4 МБ у QuickJS.
