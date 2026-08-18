@@ -672,6 +672,40 @@ class EditorScreenModelTest {
         assertEquals(0, access.openCalls, "удержанный источник не открывается")
     }
 
+    @Test
+    fun TC_22_tabsAppearWithDocumentAndDisappearOnReturnToList() {
+        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
+        access.listing = listOf(held)
+        access.held = held
+        access.contents[held.id] = "исходный"
+        val model = model()
+
+        // Список папки: полосы вкладок нет (FR-22).
+        model.start(liftHeldSource = false)
+        assertIs<EditorDocument.Browsing>(model.document)
+        assertFalse(editorTabsVisible(model.document), "на списке документов вкладок нет (TC-22)")
+
+        // Документ открыт: вкладки появляются, активна РЕДАКТОР.
+        model.open(held)
+        model.openRunner()
+        assertTrue(editorTabsVisible(model.document), "открытый документ — полоса вкладок есть (FR-2)")
+        assertEquals(
+            EditorTab.Editor,
+            editorTabAfter(model.document, EditorTab.Editor),
+            "документ открывается редактором",
+        )
+        assertEquals(
+            EditorTab.Preview,
+            editorTabAfter(model.document, EditorTab.Preview),
+            "пока документ открыт, выбор вкладки пользователя не сбрасывается (FR-2)",
+        )
+
+        // Возврат к списку кнопкой «назад» (FR-21): вкладки исчезают.
+        model.closeRequested()
+        assertIs<EditorDocument.Browsing>(model.document)
+        assertFalse(editorTabsVisible(model.document), "возврат к списку убирает вкладки (TC-22)")
+    }
+
     /** Правка как в продукте: сначала поле, затем событие модели (подписка `snapshotFlow`). */
     private fun EditorScreenModel.typeText(text: String) {
         editor.textFieldState.edit { replace(0, length, text) }

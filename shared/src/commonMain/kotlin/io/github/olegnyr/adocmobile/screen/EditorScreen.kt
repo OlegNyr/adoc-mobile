@@ -86,6 +86,31 @@ import kotlin.time.Clock
 enum class EditorTab { Editor, Preview }
 
 /**
+ * Показывать ли полосу вкладок (`FR-22`, решение владельца 2026-08-18):
+ * только при открытом документе.
+ *
+ * Уточняет `FR-2`, писавшийся до появления состояний списка: вкладки
+ * переключают представления *документа*, и над списком папки или пустотой им
+ * нечего переключать.
+ */
+internal fun editorTabsVisible(document: EditorDocument): Boolean = document is EditorDocument.Open
+
+/**
+ * Какая вкладка активна после смены состояния экрана.
+ *
+ * Пока документ открыт, выбор пользователя неприкосновенен (`FR-2`): поворот и
+ * рекомпозиция не сбрасывают превью на редактор. Закрытие документа (`FR-21`)
+ * сбрасывает выбор: полосы всё равно нет, а следующий документ открывается
+ * редактором — иначе он открылся бы превью, оставшимся от прежнего.
+ *
+ * Чистая функция, а не ветка в композиции, — тем же приёмом, что
+ * [undoShortcutFor]: инфраструктуры compose-тестов в проекте нет, и решение
+ * обязано быть проверяемым в `commonTest`.
+ */
+internal fun editorTabAfter(document: EditorDocument, selected: EditorTab): EditorTab =
+    if (document is EditorDocument.Open) selected else EditorTab.Editor
+
+/**
  * Экран редактора по макету «02» — фича 005-editor-screen, слайсы `SL-1`…`SL-3`.
  *
  * App bar с именем файла и состоянием документа, вкладки `РЕДАКТОР` / `ПРЕВЬЮ`,
@@ -158,12 +183,19 @@ fun EditorScreen(
             var viewingList by rememberSaveable { mutableStateOf(false) }
             LaunchedEffect(model) { model.start(fieldSourceId, liftHeldSource = !viewingList) }
 
+            // Выбранная вкладка объявлена до подписки на состояние: закрытие
+            // документа её сбрасывает (FR-22), и эффекту нужен доступ к ней.
+            var selectedTabName by rememberSaveable { mutableStateOf(EditorTab.Editor.name) }
+
             val document = model.document
             LaunchedEffect(document) {
                 if (document is EditorDocument.Open) {
                     fieldSourceId = document.runner.document.source.id
                 }
                 viewingList = document !is EditorDocument.Open
+                // Закрытие документа сбрасывает выбор вкладки (FR-22): следующий
+                // документ открывается редактором, а не превью прежнего.
+                selectedTabName = editorTabAfter(document, EditorTab.valueOf(selectedTabName)).name
             }
 
             // Системная кнопка и жест «назад» Android — тот же путь, что кнопка
@@ -178,7 +210,6 @@ fun EditorScreen(
                 snapshotFlow { textFieldState.text }.collect { model.textEdited(it.toString()) }
             }
 
-            var selectedTabName by rememberSaveable { mutableStateOf(EditorTab.Editor.name) }
             val selectedTab = EditorTab.valueOf(selectedTabName)
             val focusManager = LocalFocusManager.current
 
@@ -238,16 +269,22 @@ fun EditorScreen(
                         onRetryWrite = model::retryWriteRequested,
                     )
                     ChromeDivider()
-                    EditorTabs(
-                        selected = selectedTab,
-                        onSelect = { tab ->
-                            selectedTabName = tab.name
-                            // На превью клавиатуре делать нечего; каретка при
-                            // этом остаётся в TextFieldState (FR-3).
-                            if (tab == EditorTab.Preview) focusManager.clearFocus()
-                        },
-                    )
-                    ChromeDivider()
+                    // Полоса вкладок — только при открытом документе (FR-22):
+                    // над списком папки и пустыми состояниями переключать
+                    // нечего. Разделитель под app bar остаётся один — нижний
+                    // принадлежит полосе и уходит вместе с ней.
+                    if (editorTabsVisible(document)) {
+                        EditorTabs(
+                            selected = selectedTab,
+                            onSelect = { tab ->
+                                selectedTabName = tab.name
+                                // На превью клавиатуре делать нечего; каретка при
+                                // этом остаётся в TextFieldState (FR-3).
+                                if (tab == EditorTab.Preview) focusManager.clearFocus()
+                            },
+                        )
+                        ChromeDivider()
+                    }
                 }
 
                 // Плашка отказа записи — под app bar, над содержимым, на обеих
