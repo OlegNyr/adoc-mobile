@@ -42,6 +42,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -219,6 +221,24 @@ fun EditorScreen(
             // поворота его выдаёт заново само поле.
             var fieldFocused by remember { mutableStateOf(false) }
 
+            // Возврат с превью возвращает полю фокус (FR-23): каретка встаёт на
+            // прежнее место, клавиатура и панель вставки открываются, и набор
+            // продолжается без лишнего касания. Условие — именно смена вкладки
+            // с превью на редактор: открытие документа фокуса не просит, иначе
+            // клавиатура вылезала бы на каждый вход в файл.
+            val fieldFocus = remember { FocusRequester() }
+            var previousTab by remember { mutableStateOf(selectedTab) }
+            LaunchedEffect(selectedTab, document) {
+                val returned = previousTab == EditorTab.Preview && selectedTab == EditorTab.Editor
+                previousTab = selectedTab
+                if (returned && document is EditorDocument.Open) {
+                    // Полотно не покидает композицию на превью, поэтому узел жив
+                    // и запрос доходит; на всякий отказ окружения падать экраном
+                    // из-за фокуса нельзя — правки при этом целы.
+                    runCatching { fieldFocus.requestFocus() }
+                }
+            }
+
             // Честный сигнал видимости превью (FR-13): вкладка выбрана, документ
             // открыт и приложение на переднем плане — всё три сразу. Модель
             // идемпотентна, поэтому рекомпозиция с тем же значением безвредна.
@@ -310,6 +330,7 @@ fun EditorScreen(
                                 state = textFieldState,
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .focusRequester(fieldFocus)
                                     .onFocusChanged { fieldFocused = it.isFocused }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                             )
