@@ -292,6 +292,44 @@ val verifyRenderSeams = tasks.register("verifyRenderSeams") {
     }
 }
 
+/**
+ * Граница работ фичи 007-git-sync: типы JGit не пересекают общий код.
+ *
+ * Запрет из 🚫-списка плана («типы JGit в `commonMain`») ловится составом
+ * импортов, а не ревью: `GitSync` — это ещё и точка подключения libgit2-пути
+ * iOS, и просочившийся JVM-тип закрыл бы его молча. Тем же приёмом, что
+ * verifyHighlightIsPlatformNeutral; область — commonMain и commonTest целиком:
+ * подделке и тестам моделей JGit нужен не больше, чем интерфейсу.
+ */
+val verifyGitSeamIsPlatformNeutral = tasks.register("verifyGitSeamIsPlatformNeutral") {
+    group = "verification"
+    description = "Типы JGit не пересекают commonMain и commonTest"
+
+    val commonRoots = files(
+        rootDir.resolve("shared/src/commonMain"),
+        rootDir.resolve("shared/src/commonTest"),
+    )
+    inputs.files(commonRoots).withPropertyName("sources")
+
+    doLast {
+        val forbidden = Regex("""\borg\.eclipse\.jgit\b""")
+        val offenders = commonRoots.asFileTree
+            .matching { include("**/*.kt") }
+            .flatMap { file ->
+                file.readLines()
+                    .withIndex()
+                    .filter { (_, line) -> forbidden.containsMatchIn(line) }
+                    .map { (i, line) -> "  ${file.name}:${i + 1}  ${line.trim()}" }
+            }
+
+        check(offenders.isEmpty()) {
+            "Тип JGit в общем коде (границы работ 007-git-sync):\n" +
+                offenders.joinToString("\n") +
+                "\nПлатформенным типам место в androidMain; общий код видит только GitSync."
+        }
+    }
+}
+
 tasks.named("check") {
     dependsOn(
         verifyNoColorLiterals,
@@ -300,6 +338,7 @@ tasks.named("check") {
         verifyHighlightIsCommonOnly,
         verifyHighlightIsPlatformNeutral,
         verifyRenderSeams,
+        verifyGitSeamIsPlatformNeutral,
     )
 }
 
@@ -348,12 +387,25 @@ kotlin {
             api(libs.compose.material3)
             api(libs.compose.ui)
             api(libs.compose.components.resources)
+
+            // Явно, хотя приезжает и транзитивно с Compose: Flow — часть
+            // публичного контракта GitSync, suspend-швы и модели экранов
+            // зависят от корутин напрямую. api по той же причине, что Compose.
+            api(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
+            // JGit — compileOnly, а не implementation, вынужденно (SL-2 фичи
+            // 007): в runtime-classpath device-тестов этого модуля джарник с
+            // Java records валит дексацию (нет потребителя глобальных синтетик
+            // D8 — факт спайка E0, research 007). Классы в рантайме приложению
+            // даёт :androidApp своей implementation(libs.jgit); страж пропажи —
+            // verifyJGitPackaged там же. Вернуть implementation, когда AGP
+            // починит конвейер device-тестов KMP-модуля.
+            compileOnly(libs.jgit)
 
             // Движок рендера (FR-2). Он приезжает вместе с нативной библиотекой
             // QuickJS, поэтому объявлен implementation: приложению видеть его
@@ -366,6 +418,13 @@ kotlin {
             // InstrumentationRegistry (через транзитивный monitor).
             implementation(kotlin("test"))
             implementation(libs.androidx.test.runner)
+
+            // JGit сюда подключать нельзя: конвейер дексации device-тестов
+            // KMP-библиотеки не потребляет глобальные синтетики D8, и джарник
+            // с Java records (JGit ≥ 7.x) валит mergeExtDexAndroidDeviceTest.
+            // Факт установлен спайком E0 фичи 007-git-sync; спайк живёт в
+            // androidApp/src/androidTest, где конвейер приложения дексует
+            // records штатно.
         }
     }
 }

@@ -19,6 +19,13 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+
+        // Спайк E0 фичи 007-git-sync: инструментальный прогон JGitSpikeTest.
+        // Спайк живёт здесь, а не в androidDeviceTest KMP-модуля, потому что
+        // конвейер дексации device-тестов KMP-библиотеки падает на Java records
+        // из JGit 7.x (нет потребителя глобальных синтетик D8); конвейер
+        // приложения дексует их штатно. Удаляется вместе со спайком.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -138,8 +145,57 @@ val verifyBundlePackagedInRelease = tasks.register("verifyBundlePackagedInReleas
     }
 }
 
+/**
+ * Страж JGit-шва (SL-2 фичи 007): классы JGit действительно попали в debug-APK.
+ *
+ * `:shared` объявляет JGit как `compileOnly` — вынужденно, см. комментарий в
+ * его каталоге зависимостей. Цена приёма: убрать `implementation(libs.jgit)`
+ * здесь можно молча, сборка останется зелёной, а `JGitSync` упадёт с
+ * `NoClassDefFoundError` на устройстве. Ровно класс отказов «зелёная сборка,
+ * пустой артефакт», который в проекте уже случался со шрифтами, — поэтому
+ * страж, а не память разработчика.
+ *
+ * Ищется байтовая подпись дескриптора класса в `classes*.dex`: дескрипторы
+ * лежат в dex открытым текстом, а распаковывать dex ради одного факта незачем.
+ */
+val verifyJGitPackaged = tasks.register("verifyJGitPackaged") {
+    group = "verification"
+    description = "Классы JGit попали в debug-APK"
+    dependsOn("assembleDebug")
+
+    val apk = layout.buildDirectory.file("outputs/apk/debug/androidApp-debug.apk")
+    inputs.file(apk)
+
+    doLast {
+        val signature = "org/eclipse/jgit/api/Git".toByteArray(Charsets.US_ASCII)
+        val found = ZipFile(apk.get().asFile).use { zip ->
+            zip.entries().asSequence()
+                .filter { it.name.matches(Regex("classes\\d*\\.dex")) }
+                .any { entry ->
+                    val bytes = zip.getInputStream(entry).use { it.readBytes() }
+                    bytes.indexOfSubArray(signature) >= 0
+                }
+        }
+        check(found) {
+            "Классы JGit не попали в APK: в :shared он compileOnly, рантайм обязан " +
+                "класть :androidApp через implementation(libs.jgit) — зависимость пропала."
+        }
+    }
+}
+
+/** Поиск подстроки байт — `String(bytes)` на 15-мегабайтном dex дороже и лжива для не-ASCII. */
+fun ByteArray.indexOfSubArray(needle: ByteArray): Int {
+    outer@ for (i in 0..size - needle.size) {
+        for (j in needle.indices) {
+            if (this[i + j] != needle[j]) continue@outer
+        }
+        return i
+    }
+    return -1
+}
+
 tasks.named("check") {
-    dependsOn(verifyFontsPackaged, verifyRenderStandPackaged, verifyBundlePackagedInRelease)
+    dependsOn(verifyFontsPackaged, verifyRenderStandPackaged, verifyBundlePackagedInRelease, verifyJGitPackaged)
 }
 
 dependencies {
@@ -151,4 +207,21 @@ dependencies {
     // Только debug: движок нужен стенду замеров T-013. В продуктовый код он
     // приедет отдельной задачей, когда шов рендерера будет спроектирован.
     debugImplementation(libs.quickjs.kt)
+
+    // Рантайм-половина JGit-шва (SL-2 фичи 007): :shared объявляет JGit как
+    // compileOnly — implementation там валит дексацию device-тестов KMP-модуля
+    // (records, факт спайка E0). Классы в APK кладёт приложение; пропажу ловит
+    // verifyJGitPackaged ниже.
+    implementation(libs.jgit)
+
+    // Инструментальные тесты Git-слоя (SL-2): JGit в тестовом APK нужен и сам
+    // по себе — тесты строят file://-remote руками.
+    androidTestImplementation(libs.jgit)
+    // Корутины в тестах используются напрямую (runBlocking, сбор Flow) —
+    // зависимость явная, а не наследство classpath приложения.
+    androidTestImplementation(libs.kotlinx.coroutines.core)
+    // test-junit, а не test: базовый kotlin-test не содержит аннотации @Test —
+    // она приходит из привязки к конкретному фреймворку (здесь JUnit 4).
+    androidTestImplementation(kotlin("test-junit"))
+    androidTestImplementation(libs.androidx.test.runner)
 }

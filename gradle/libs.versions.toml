@@ -22,6 +22,18 @@ androidxLifecycle = "2.11.0"
 # (JUnit 4, InstrumentationRegistry из monitor) приезжает транзитивно.
 androidxTestRunner = "1.7.0"
 
+# JGit — Git-слой фичи 007 (SL-2): compileOnly в :shared/androidMain (конвейер
+# device-тестов KMP-модуля не дексует records — факт спайка E0), рантайм кладёт
+# :androidApp через implementation; страж — verifyJGitPackaged.
+jgit = "7.7.1.202607240634-r"
+
+# Корутины: код зависит от них напрямую (Flow в контракте GitSync, suspend-швы,
+# модели экранов), и версия обязана быть решением каталога, а не тем, что
+# случайно притащил Compose. Значение совпадает с транзитивной версией Compose
+# 1.11.1 — расхождение при обновлении Compose решается здесь явно.
+# Решение владельца 2026-08-17 (журнал 007, отчёт E1).
+kotlinxCoroutines = "1.11.0"
+
 # Android SDK. compileSdk 37 — максимум, поддерживаемый AGP 9.3.
 compileSdk = "37"
 targetSdk = "37"
@@ -43,6 +55,8 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCoreKtx" }
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
