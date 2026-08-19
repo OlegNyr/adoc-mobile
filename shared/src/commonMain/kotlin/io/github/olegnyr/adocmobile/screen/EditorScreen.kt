@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Surface
@@ -77,7 +75,6 @@ import io.github.olegnyr.adocmobile.render.adocRenderer
 import io.github.olegnyr.adocmobile.theme.AdocTheme
 import io.github.olegnyr.adocmobile.theme.AdocTypography
 import io.github.olegnyr.adocmobile.theme.adocTextStyle
-import io.github.olegnyr.adocmobile.ui.AdocBlueprintBlock
 import io.github.olegnyr.adocmobile.ui.AdocEditor
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -92,8 +89,8 @@ enum class EditorTab { Editor, Preview }
  * только при открытом документе.
  *
  * Уточняет `FR-2`, писавшийся до появления состояний списка: вкладки
- * переключают представления *документа*, и над списком папки или пустотой им
- * нечего переключать.
+ * переключают представления *документа*, и пока документ ещё читается,
+ * переключать им нечего.
  */
 internal fun editorTabsVisible(document: EditorDocument): Boolean = document is EditorDocument.Open
 
@@ -116,9 +113,10 @@ internal fun editorTabAfter(document: EditorDocument, selected: EditorTab): Edit
  * Экран редактора по макету «02» — фича 005-editor-screen, слайсы `SL-1`…`SL-3`.
  *
  * App bar с именем файла и состоянием документа, вкладки `РЕДАКТОР` / `ПРЕВЬЮ`,
- * полотно [AdocEditor], а до открытого документа — путь решения `OQ-1`:
- * пустое состояние с кнопкой «Открыть папку», затем список `.adoc`-документов
- * выбранной папки.
+ * полотно [AdocEditor]. Экран существует только при документе: пустое
+ * состояние, отказ папки и список её файлов уехали на корень приложения
+ * (`FR-14` фичи 009, решение `OQ-2` там, ADR-013), и до открытого документа
+ * здесь остаётся лишь имя файла в шапке, пока он читается.
  *
  * Экран целиком обёрнут в один [AdocTheme] (`FR-15`) и живёт в `commonMain`
  * (`NFR-2`): платформе остаётся хостинг и системный диалог выбора папки.
@@ -129,9 +127,9 @@ internal fun editorTabAfter(document: EditorDocument, selected: EditorTab): Edit
  * автосохранение.
  *
  * @param requestFolder платформенный диалог выбора папки
- * (`ACTION_OPEN_DOCUMENT_TREE`): вернуть дерево с удержанным правом или `null`,
- * если пользователь передумал. Файл выбирается уже без платформы — из списка
- * документов папки.
+ * (`ACTION_OPEN_DOCUMENT_TREE`) для пункта меню «Открыть папку…»: вернуть
+ * дерево с удержанным правом или `null`, если пользователь передумал. Смена
+ * папки закрывает открытый документ — новый файл выбирается уже на корне.
  * @param foreground приложение на переднем плане. Сигнал подаёт платформенный
  * хостинг (у Compose Multiplatform общего lifecycle-примитива в зависимостях
  * проекта нет): уход в фон гасит видимость превью (`OQ-5` фичи 003) и
@@ -206,15 +204,13 @@ fun EditorScreen(
                 selectedTabName = editorTabAfter(document, EditorTab.valueOf(selectedTabName)).name
             }
 
-            // Системная кнопка и жест «назад» Android — тот же путь, что кнопка
-            // в app bar (FR-21): перехват только при открытом документе; со
-            // списка «назад» не перехватывается — приложение сворачивается
-            // платформенным поведением, включая анимацию predictive back.
-            // Перехват только при открытом документе — и только потому, что
-            // здесь у «назад» есть своя работа: немедленная запись перед
-            // закрытием (`FR-21`). Все прочие состояния держит перехват уровня
-            // приложения по признаку стека (`AdocApp`); оба обработчика одного
-            // API, и вложенный выигрывает, поэтому пока документ открыт
+            // Системная кнопка и жест «назад» Android — тот же путь, что
+            // кнопка в app bar (FR-21). Перехват только при открытом документе,
+            // и только потому, что здесь у «назад» есть своя работа:
+            // немедленная запись перед закрытием. Всё остальное время, включая
+            // чтение документа, «назад» держит перехват уровня приложения по
+            // признаку стека (`AdocApp`, `FR-5` фичи 009); оба обработчика
+            // одного API, и вложенный выигрывает, поэтому пока документ открыт
             // побеждает этот.
             BackHandler(enabled = document is EditorDocument.Open) { model.closeRequested() }
 
@@ -266,9 +262,10 @@ fun EditorScreen(
             // модель реагирует только на смену значения.
             LaunchedEffect(foreground) { model.foregroundChanged(foreground) }
 
-            // Одно действие «открыть папку» на все три носителя: пустоту,
-            // отказ папки и шапку списка. Отмена диалога — честный null,
-            // состояние экрана не меняется.
+            // Единственный носитель этого действия на экране документа —
+            // пункт меню «Открыть папку…»: смена папки закрывает документ
+            // (`folderChosen`), и дальше файл выбирается на корне. Отмена
+            // диалога — честный null, документ остаётся открытым.
             val openFolder: () -> Unit = {
                 scope.launch { if (requestFolder() != null) model.folderChosen() }
             }
@@ -295,7 +292,7 @@ fun EditorScreen(
                         // Имя показывается, только пока документ открывается
                         // хостингом: без хостинга состояния без документа
                         // рисуют себя сами и в подписи не нуждаются.
-                        openingName = openSource?.displayName,
+                        openingName = openSource.displayName,
                         retryWriteVisible = model.writeFailure != null,
                         onBack = model::closeRequested,
                         onUndo = model::undoRequested,
@@ -306,9 +303,9 @@ fun EditorScreen(
                     )
                     ChromeDivider()
                     // Полоса вкладок — только при открытом документе (FR-22):
-                    // над списком папки и пустыми состояниями переключать
-                    // нечего. Разделитель под app bar остаётся один — нижний
-                    // принадлежит полосе и уходит вместе с ней.
+                    // пока документ читается, переключать нечего. Разделитель
+                    // под app bar остаётся один — нижний принадлежит полосе и
+                    // уходит вместе с ней.
                     if (editorTabsVisible(document)) {
                         EditorTabs(
                             selected = selectedTab,
@@ -406,10 +403,15 @@ fun EditorScreen(
  * App bar: имя файла и метка состояния (`FR-1`), высота 52 по макету «02»;
  * справа — меню документа (`FR-16`, состав — решение `OQ-4`).
  *
- * Слева от имени открытого документа — кнопка «назад» к списку документов
- * папки (`FR-21`, решение `OQ-8`); в макете здесь стрелка, и с решением по
- * пути «документ → список» она обрела назначение. Без открытого документа
- * кнопки нет: список — корень навигации MVP, назад с него некуда.
+ * Слева от имени открытого документа — кнопка «назад» на корневой список
+ * (`FR-21`, решение `OQ-8`); в макете здесь стрелка, и с решением по пути
+ * «документ → список» она обрела назначение. Пока документ ещё читается,
+ * кнопки нет — не потому, что уходить некуда, а потому, что уводить нечем:
+ * своей работы («дописать несохранённое перед уходом») у неё в этот момент
+ * нет, а сам выход держит перехват уровня приложения по признаку стека
+ * (`FR-5` фичи 009). Рассуждение «назад отсюда некуда» в этом файле стояло
+ * раньше и трижды оборачивалось экраном без выхода — оно про корень, и
+ * переносить его на экран второго уровня нельзя.
  * Иконка-переключатель превью из макета опущена: дизайн-вопрос `OQ-4` о её
  * судьбе при живых вкладках не решён, а дублировать вкладку по умолчанию —
  * значит решить его за дизайнера.
@@ -755,28 +757,6 @@ private fun WriteFailureBanner(message: String, onRetry: () -> Unit) {
             SecondaryButton(label = "ПОВТОРИТЬ", onClick = onRetry)
         }
         ChromeDivider()
-    }
-}
-
-/**
- * Первичная кнопка по описанию дизайна: заливка акцентом, высота 46,
- * Barlow Condensed прописными; на экране такая одна.
- */
-@Composable
-private fun PrimaryButton(label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .background(AdocTheme.colors.accent)
-            .clickable(role = Role.Button, onClick = onClick),
-    ) {
-        Text(
-            text = label,
-            style = adocTextStyle(AdocTypography.buttonLabel),
-            color = AdocTheme.colors.onAccent,
-            modifier = Modifier.align(Alignment.Center),
-        )
     }
 }
 

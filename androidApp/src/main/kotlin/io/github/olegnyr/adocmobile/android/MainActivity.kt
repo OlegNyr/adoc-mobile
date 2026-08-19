@@ -27,6 +27,7 @@ import io.github.olegnyr.adocmobile.document.AndroidDocumentTreeAccess
 import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.render.installAdocRenderer
 import io.github.olegnyr.adocmobile.screen.app.AdocApp
+import io.github.olegnyr.adocmobile.screen.app.AndroidActiveSourceStore
 import io.github.olegnyr.adocmobile.document.DocumentSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,10 @@ class MainActivity : ComponentActivity() {
 private fun AdocAppHost() {
     val context = LocalContext.current
     val access = remember { AndroidDocumentTreeAccess(context) }
+    // Признак активного источника (`FR-11`): своё хранилище платформы, общая
+    // половина видит интерфейс. Реализации Git-шва хостинг не строит — клона
+    // у приложения нет, и Git-разделов вместе с ним (`FR-17`, врезка `SL-4`).
+    val activeSource = remember { AndroidActiveSourceStore(context) }
     val scope = rememberCoroutineScope()
 
     // Мост «callback диалога → suspend»: экран ждёт CompletableDeferred,
@@ -155,7 +160,8 @@ private fun AdocAppHost() {
     }
 
     AdocApp(
-        access = access,
+        folderAccess = access,
+        activeSourceStore = activeSource,
         requestFolder = {
             val request = CompletableDeferred<TreeSource?>()
             pending?.complete(null)

@@ -10,7 +10,6 @@ import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
 import io.github.olegnyr.adocmobile.document.DocumentWriteError
 import io.github.olegnyr.adocmobile.document.DocumentWriteResult
-import io.github.olegnyr.adocmobile.document.TreeAccessError
 import io.github.olegnyr.adocmobile.document.TreeListResult
 import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.document.openDocument
@@ -27,12 +26,17 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Логика holder-а экрана с подставными швами — слайсы `SL-1` и `SL-3` фичи
  * 005-editor-screen: `TC-1`, `TC-2`, `TC-5`, `TC-6`, автоматизируемая половина
- * `TC-4`, автосохранение сквозь экран (`TC-7`…`TC-9`) и переключение на папку
- * (решение `OQ-1`, `FR-1a` фичи 004).
+ * `TC-4` и автосохранение сквозь экран (`TC-7`…`TC-9`).
+ *
+ * Экран — только документ (`OQ-2` фичи 009): списка папки и пустых состояний
+ * у него нет, поэтому нет их и здесь. Что видит пользователь, когда документа
+ * нет, проверяет `RootListModelTest`; что модель сообщает хостингу на выходе
+ * из документа — `EditorHostContractTest`.
  *
  * Приём тот же, что в `AutosaveRunnerTest`: часы — переменная, ожидание паузы —
  * подставная функция с воротами, файловый шов — подделка интерфейса, диспетчер
@@ -47,9 +51,13 @@ class EditorScreenModelTest {
     private val access = FakeAccess()
     private val waits = FakeWaits()
 
-    private val held = DocumentSource(id = "content://doc/1", displayName = "заметка.adoc")
+    /** Документ, который хостинг просит открыть: имя источника ему называют, а не ищут. */
+    private val note = DocumentSource(id = "content://doc/1", displayName = "заметка.adoc")
 
     private val renderer = FakeRenderer()
+
+    /** Всё, что модель сообщила хостингу выходом из документа: текст отказа либо `null`. */
+    private val reportedClosures = mutableListOf<String?>()
 
     private fun model(editor: DocumentEditor = DocumentEditor()): EditorScreenModel =
         EditorScreenModel(
@@ -60,34 +68,33 @@ class EditorScreenModelTest {
             clock = { now },
             page = { fragment -> "<page>$fragment</page>" },
             delayUntil = waits::wait,
+            onDocumentClosed = { notice -> reportedClosures += notice },
         )
 
     private fun EditorScreenModel.openRunner() =
         assertIs<EditorDocument.Open>(document, "ожидался открытый документ").runner
 
     @Test
-    fun TC_5_startLiftsHeldSourceIntoFieldWithEmptyHistory() {
-        access.held = held
-        access.contents[held.id] = "= Заголовок\n\nАбзац."
+    fun TC_5_namedSourceIsLoadedIntoFieldWithEmptyHistory() {
+        access.contents[note.id] = "= Заголовок\n\nАбзац."
         val model = model()
 
-        model.open(held)
+        model.open(note)
 
         val runner = model.openRunner()
         assertEquals("= Заголовок\n\nАбзац.", model.editor.textFieldState.text.toString())
-        assertEquals(held, runner.document.source)
+        assertEquals(note, runner.document.source)
         assertFalse(model.editor.canUndo, "история отмены после загрузки пуста (FR-8)")
         assertNull(editorStatusLabel(runner.document), "только что открытый документ не изменён")
     }
 
     @Test
     fun TC_5_openingAnotherDocumentDropsPendingWriteOfPrevious() {
-        access.held = held
-        access.contents[held.id] = "первый"
+        access.contents[note.id] = "первый"
         val other = DocumentSource(id = "content://doc/2", displayName = "другой.adoc")
         access.contents[other.id] = "второй"
         val model = model()
-        model.open(held)
+        model.open(note)
         val firstRunner = model.openRunner()
 
         // Правка первого документа повисла в паузе автосохранения…
@@ -111,10 +118,9 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_1_appBarNameThenModifiedLabelThenCleanAfterWrite() {
-        access.held = held
-        access.contents[held.id] = "= Заголовок"
+        access.contents[note.id] = "= Заголовок"
         val model = model()
-        model.open(held)
+        model.open(note)
         val runner = model.openRunner()
 
         assertEquals("заметка.adoc", runner.document.source.displayName)
@@ -125,16 +131,15 @@ class EditorScreenModelTest {
 
         now = AutosavePolicy.DEFAULT_PAUSE_MILLIS
         waits.releaseLast()
-        assertEquals(listOf(held.id to "= Заголовок!"), access.written, "пауза даёт ровно одну запись (FR-11)")
+        assertEquals(listOf(note.id to "= Заголовок!"), access.written, "пауза даёт ровно одну запись (FR-11)")
         assertNull(editorStatusLabel(runner.document), "после успешной записи — снова чистое имя (FR-1)")
     }
 
     @Test
     fun TC_2_editAndRevertTurnLabelOffWithoutWrite() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
         val runner = model.openRunner()
 
         model.textEdited("исходный правленый")
@@ -146,34 +151,45 @@ class EditorScreenModelTest {
         assertEquals(0, access.written.size, "возврат к записанному не переписывает файл (TC-2)")
     }
 
+    /**
+     * Оракул — текст, ушедший наружу, а не состояние модели: своего носителя
+     * отказа у экрана больше нет (`FR-9` с оговоркой фичи 009), и проверка
+     * начального состояния ничего бы не доказывала — модель начинает жизнь
+     * в `Opening` с пустым полем и без всякого отказа.
+     *
+     * Правка, от которой тест обязан покраснеть: убрать в
+     * `EditorScreenModel.open` ветку `DocumentOpenResult.Failed` (заменить её
+     * на `Unit`) — пользователь останется на пустом экране открытия, а
+     * причина не дойдёт ни до кого.
+     */
     @Test
-    fun TC_6_openFailureLeavesNothingOpenAndNothingInTheField() {
-        access.held = held
+    fun TC_6_openFailureReportsTheRefusalTextToTheHost() {
         access.openError = DocumentAccessError.NotFound
         val model = model()
 
-        model.open(held)
+        model.open(note)
 
+        assertEquals(
+            listOf<String?>(DocumentAccessError.NotFound.userMessage(note.displayName)),
+            reportedClosures,
+            "текст отказа уходит хостингу — он единственный, кто его покажет (FR-9)",
+        )
         assertIs<EditorDocument.Opening>(model.document, "документ не открылся — открывать нечего")
         assertEquals("", model.editor.textFieldState.text.toString(), "в поле ничего не загружено (FR-9)")
-        // Куда попадает пользователь и где видит текст отказа — забота
-        // хостинга навигации; это проверяет `EditorHostContractTest` (`TC-23`
-        // фичи 009). Список из этого экрана уехал вместе со слайсом `SL-2b`.
     }
 
     @Test
     fun TC_8_movedToBackgroundWritesImmediately() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
 
         model.textEdited("исходный правленый")
         assertEquals(0, access.written.size, "до паузы записи нет")
 
         model.foregroundChanged(false)
         assertEquals(
-            listOf(held.id to "исходный правленый"),
+            listOf(note.id to "исходный правленый"),
             access.written,
             "уход в фон пишет немедленно, не дожидаясь паузы (FR-11, FR-16 фичи 004)",
         )
@@ -186,11 +202,10 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_9_writeFailureShowsMessageKeepsTextAndDoesNotRetrySilently() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         access.writeError = DocumentWriteError.PermissionLost
         val model = model()
-        model.open(held)
+        model.open(note)
         val runner = model.openRunner()
 
         model.typeText("исходный правленый")
@@ -214,11 +229,10 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_9_retryRequestedWritesAgainAndSuccessClearsFailure() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         access.writeError = DocumentWriteError.WriteFailed
         val model = model()
-        model.open(held)
+        model.open(note)
 
         model.textEdited("исходный правленый")
         now = AutosavePolicy.DEFAULT_PAUSE_MILLIS + 1
@@ -239,8 +253,7 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_4_restorationKeepsFieldTextAndUndoHistory() {
-        access.held = held
-        access.contents[held.id] = "= Заголовок"
+        access.contents[note.id] = "= Заголовок"
         // Поле восстановлено rememberSaveable: текст совпадает с диском,
         // история отмены не пуста — как после поворота без несохранённых правок.
         val state = TextFieldState("= Заголово")
@@ -249,7 +262,7 @@ class EditorScreenModelTest {
         assertTrue(editor.canUndo)
         val model = model(editor)
 
-        model.open(held, keepField = true)
+        model.open(note, keepField = true)
 
         model.openRunner()
         assertEquals("= Заголовок", editor.textFieldState.text.toString())
@@ -258,13 +271,12 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_4_restorationWithUnsavedEditsMarksModifiedAndAutosaves() {
-        access.held = held
-        access.contents[held.id] = "= Заголовок"
+        access.contents[note.id] = "= Заголовок"
         // Восстановленное поле разошлось с диском: правка не успела записаться.
         val editor = DocumentEditor(TextFieldState("= Заголовок правленый"))
         val model = model(editor)
 
-        model.open(held, keepField = true)
+        model.open(note, keepField = true)
 
         val runner = model.openRunner()
         assertEquals("= Заголовок правленый", editor.textFieldState.text.toString(), "правка не перетёрта диском")
@@ -272,19 +284,18 @@ class EditorScreenModelTest {
 
         now = AutosavePolicy.DEFAULT_PAUSE_MILLIS + 1
         waits.releaseAll()
-        assertEquals(listOf(held.id to "= Заголовок правленый"), access.written, "восстановленная правка доезжает до файла")
+        assertEquals(listOf(note.id to "= Заголовок правленый"), access.written, "восстановленная правка доезжает до файла")
     }
 
     @Test
     fun TC_4_startWithForeignFieldSourceLoadsFromDisk() {
-        access.held = held
-        access.contents[held.id] = "= Заголовок"
+        access.contents[note.id] = "= Заголовок"
         // В поле — текст другого источника (например, право на прежний файл
         // сменилось между выгрузкой и возвратом): восстановление не применимо.
         val editor = DocumentEditor(TextFieldState("чужой текст"))
         val model = model(editor)
 
-        model.open(held, keepField = false)
+        model.open(note, keepField = false)
 
         model.openRunner()
         assertEquals("= Заголовок", editor.textFieldState.text.toString(), "документ загружен с диска")
@@ -292,12 +303,11 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_11_visibilitySignalReachesPipelineAndFollowsDocument() {
-        access.held = held
-        access.contents[held.id] = "первый"
+        access.contents[note.id] = "первый"
         val other = DocumentSource(id = "content://doc/2", displayName = "другой.adoc")
         access.contents[other.id] = "второй"
         val model = model()
-        model.open(held)
+        model.open(note)
 
         // Пока превью скрыто, правки не рождают ни одного рендера (TC-11).
         // Правка идёт через поле, как в продукте: пайплайн берёт снимок текста
@@ -330,10 +340,9 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_15_menuUndoRevertsInputAndRedoRestoresIt() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
 
         model.typeText("исходный правленый")
         assertTrue(model.editor.canUndo, "после правки есть что отменять (FR-16)")
@@ -362,10 +371,9 @@ class EditorScreenModelTest {
 
         // С документом, но пустой историей: флаги недоступности для меню,
         // вызовы — no-op, не ошибка (FR-16; наследует TC-13 фичи 004).
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
         assertFalse(model.editor.canUndo, "пустая история — пункт «Отменить» недоступен")
         assertFalse(model.editor.canRedo, "пустая история — пункт «Повторить» недоступен")
         model.undoRequested()
@@ -376,10 +384,9 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_14_menuUndoDrivesLabelAndPreviewFromSingleState() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
         val runner = model.openRunner()
 
         // Превью видно: первый рендер — немедленно, исходным текстом.
@@ -404,10 +411,9 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_20_shareWritesUnsavedEditThenSignalsSend() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
 
         model.typeText("исходный правленый")
         assertEquals(0, access.written.size, "до паузы записи нет — правка ещё не на диске")
@@ -420,26 +426,25 @@ class EditorScreenModelTest {
         }
 
         assertEquals(
-            listOf(held.id to "исходный правленый"),
+            listOf(note.id to "исходный правленый"),
             access.written,
             "перед отправкой — немедленная запись несохранённой правки (FR-20)",
         )
-        assertEquals(listOf(held), shared, "сигнал отправки несёт источник открытого документа")
+        assertEquals(listOf(note), shared, "сигнал отправки несёт источник открытого документа")
         assertEquals(1, writtenAtSend, "запись предшествует сигналу отправки (TC-20)")
     }
 
     @Test
     fun TC_20_shareWithoutDivergenceSendsWithoutWrite() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
 
         val shared = mutableListOf<DocumentSource>()
         model.shareRequested { shared += it }
 
         assertEquals(0, access.written.size, "без расхождения с диском записи нет (FR-20)")
-        assertEquals(listOf(held), shared, "файл на диске уже совпадает с полем — отправка уходит сразу")
+        assertEquals(listOf(note), shared, "файл на диске уже совпадает с полем — отправка уходит сразу")
     }
 
     @Test
@@ -456,11 +461,10 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_20_shareAfterFailedWriteDoesNotSendStaleFile() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         access.writeError = DocumentWriteError.PermissionLost
         val model = model()
-        model.open(held)
+        model.open(note)
 
         model.typeText("исходный правленый")
         var sent = false
@@ -477,12 +481,9 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_21_backWritesUnsavedEditThenClosesToFolderList() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
         model.openRunner()
 
         model.typeText("исходный правленый")
@@ -491,7 +492,7 @@ class EditorScreenModelTest {
         model.closeRequested()
 
         assertEquals(
-            listOf(held.id to "исходный правленый"),
+            listOf(note.id to "исходный правленый"),
             access.written,
             "перед закрытием — немедленная запись несохранённой правки (FR-21)",
         )
@@ -503,12 +504,9 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_21_backWithoutDivergenceClosesWithoutWrite() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
-        model.open(held)
+        model.open(note)
         model.openRunner()
 
         model.closeRequested()
@@ -519,13 +517,10 @@ class EditorScreenModelTest {
 
     @Test
     fun TC_21_backAfterFailedWriteKeepsDocumentOpenWithVisibleFailure() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         access.writeError = DocumentWriteError.PermissionLost
         val model = model()
-        model.open(held)
+        model.open(note)
 
         model.typeText("исходный правленый")
         model.closeRequested()
@@ -552,12 +547,43 @@ class EditorScreenModelTest {
 
         assertIs<EditorDocument.Opening>(model.document, "без открытого документа закрывать нечего (FR-21)")
         assertEquals(0, access.written.size, "no-op не рождает записи")
+        assertEquals(
+            emptyList(),
+            reportedClosures,
+            "и хостингу ничего не сообщается: иначе первое же «назад» на экране открытия " +
+                "уводило бы пользователя с документа, который ещё читается (находка ревью SL-3)",
+        )
+    }
+
+    /**
+     * Гарантия из KDoc [EditorScreenModel.open]: неудачная попытка открыть
+     * другой документ не отнимает уже открытый.
+     *
+     * Правка, от которой тест обязан покраснеть: убрать в `open` условие
+     * `if (document !is EditorDocument.Open)` — рабочий документ с
+     * несохранёнными правками закрылся бы из-за чужого отказа.
+     */
+    @Test
+    fun TC_6_openFailureDoesNotTakeAwayTheDocumentAlreadyOpen() {
+        access.contents[note.id] = "исходный"
+        val model = model()
+        model.open(note)
+        val runner = model.openRunner()
+
+        access.openError = DocumentAccessError.NotFound
+        model.open(DocumentSource(id = "content://doc/2", displayName = "другой.adoc"))
+
+        assertEquals(
+            runner,
+            model.openRunner(),
+            "прежний документ остаётся открытым — вместе со своей моделью и автосохранением",
+        )
+        assertEquals(emptyList(), reportedClosures, "и хостинг никуда пользователя не уводит")
     }
 
     @Test
     fun TC_22_tabsAppearWithDocumentAndDisappearWhenItCloses() {
-        access.held = held
-        access.contents[held.id] = "исходный"
+        access.contents[note.id] = "исходный"
         val model = model()
 
         // Документ ещё не открыт: полосы вкладок нет (FR-22). Раньше носителем
@@ -567,7 +593,7 @@ class EditorScreenModelTest {
         assertFalse(editorTabsVisible(model.document), "без документа вкладок нет (TC-22)")
 
         // Документ открыт: вкладки появляются, активна РЕДАКТОР.
-        model.open(held)
+        model.open(note)
         model.openRunner()
         assertTrue(editorTabsVisible(model.document), "открытый документ — полоса вкладок есть (FR-2)")
         assertEquals(
@@ -616,20 +642,33 @@ class EditorScreenModelTest {
             "HTML($source)".also { requests += source }
     }
 
-    /** Шов-подделка по образцу `AutosaveRunnerTest`: содержимое и исходы задаются тестом. */
+    /**
+     * Шов-подделка по образцу `AutosaveRunnerTest`: содержимое и исходы
+     * задаются тестом.
+     *
+     * Экран документа зовёт из всего шва ровно два метода — [open] и [write].
+     * Остальные не заглушены значением, а падают: подъём удержанного источника
+     * и перечень папки уехали в корень (`FR-8` с оговоркой фичи 009, `FR-14`
+     * фичи 009), и возвращение экрана к ним обязано быть слышно. Заглушка со
+     * значением вместо этого рождала бы мёртвую подготовку в тестах — ровно ту,
+     * из-за которой `TC-5` носил чужое имя (находка ревью `SL-2b`).
+     *
+     * Оговорка честности, и она про контекст вызова, а не про `suspend`:
+     * `AssertionError`, брошенный внутри `scope.launch` на
+     * `Dispatchers.Unconfined`, уходит обработчику исключений, а не в отчёт
+     * теста. Весь путь `open` → `attach` — тело такой корутины, поэтому за
+     * возвращение к `heldSource`, `heldTree` и `listDocuments` приём краснотой
+     * не ручается; тест в этом случае падает косвенно — на состоянии, которое
+     * не сложилось. Прямо приём работает там, где вызов синхронный, — у
+     * `release` (находка ревью `SL-3`, раунд 2).
+     */
     private class FakeAccess : DocumentTreeAccess {
-        var held: DocumentSource? = null
-        var tree: TreeSource? = null
-        var listing: List<DocumentSource> = emptyList()
-        var listError: TreeAccessError? = null
         val contents = mutableMapOf<String, String>()
         var openError: DocumentAccessError? = null
         var writeError: DocumentWriteError? = null
-        var openCalls = 0
         val written = mutableListOf<Pair<String, String>>()
 
         override suspend fun open(source: DocumentSource): DocumentOpenResult {
-            openCalls++
             openError?.let { return DocumentOpenResult.Failed(source, it) }
             val text = contents[source.id]
                 ?: return DocumentOpenResult.Failed(source, DocumentAccessError.NotFound)
@@ -642,21 +681,17 @@ class EditorScreenModelTest {
             return DocumentWriteResult.Written
         }
 
-        override fun heldSource(): DocumentSource? = held
+        override fun heldSource(): DocumentSource? =
+            fail("подъём удержанного источника — дело корня, экран его не спрашивает (FR-8)")
 
-        override fun heldTree(): TreeSource? = tree
+        override fun heldTree(): TreeSource? =
+            fail("дерево источника экрану документа не нужно (FR-14 фичи 009)")
 
-        override suspend fun listDocuments(): TreeListResult {
-            val heldTree = tree
-                ?: return TreeListResult.Failed(TreeSource("", "папка"), TreeAccessError.PermissionLost)
-            listError?.let { return TreeListResult.Failed(heldTree, it) }
-            return TreeListResult.Listed(listing)
-        }
+        override suspend fun listDocuments(): TreeListResult =
+            fail("список файлов — корневой экран, а не редактор (FR-14 фичи 009)")
 
-        override fun release() {
-            held = null
-            tree = null
-        }
+        override fun release() =
+            fail("право на дерево этот экран не отдаёт: смена папки идёт через хостинг")
     }
 
     /** Подставное ожидание паузы: сроки записываются, продолжение — за тестом. */

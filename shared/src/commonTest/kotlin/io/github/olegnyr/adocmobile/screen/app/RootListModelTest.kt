@@ -16,10 +16,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
- * Модель корневого списка — слайс `SL-2` фичи 009 (`FR-1`, `FR-14` в части
- * одного списка, `FR-7` в части источника; `TC-5`, `TC-23`…`TC-25`).
+ * Модель корневого списка — слайсы `SL-2` и `SL-3` фичи 009.
+ *
+ * `SL-2`: `FR-1`, `FR-14` в части одного списка, `FR-7` в части источника;
+ * `TC-5`, `TC-23`…`TC-25`.
+ * `SL-3`: `FR-10`, `FR-15` в части папки SAF; `TC-6`, `TC-7`, `TC-9` — здесь
+ * проверяется *поведение списка* при двух источниках, а правила выбора
+ * (что активно, что предлагается, что запоминается) — в `ActiveSourceTest`.
+ * Номера кейсов общие намеренно: кейс один, у него две половины, и каждая
+ * лежит там, где живёт её предмет.
  *
  * `TC-1` здесь *не* проверяется, хотя раньше эти тесты носили его номер:
  * кейс говорит о том, что стартовый экран — корень, а это свойство хостинга и
@@ -37,7 +45,19 @@ class RootListModelTest {
     private val note = DocumentSource(id = "doc/1", displayName = "заметка.adoc")
     private val guide = DocumentSource(id = "doc/2", displayName = "руководство.adoc")
 
-    private fun modelOn(access: FakeAccess) = RootListModel(access = access, scope = scope)
+    /**
+     * Модель над одним источником — папкой, уже выбранной пользователем.
+     *
+     * Активный источник называется явно: с `SL-3` список читает не «шов», а
+     * тот шов, который выбран (`FR-10`), и умолчание здесь скрыло бы условие
+     * половины тестов файла.
+     */
+    private fun modelOn(access: FakeAccess) = RootListModel(
+        sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = access),
+        scope = scope,
+    )
+
+    private fun modelOver(sources: ActiveSource) = RootListModel(sources = sources, scope = scope)
 
     @Test
     fun TC_24_rootShowsDocumentsOfHeldSource() {
@@ -326,6 +346,274 @@ class RootListModelTest {
         assertEquals(AppScreen.Root, navigator.current)
     }
 
+    @Test
+    fun TC_6_choosingAFolderTurnsTheEmptyStateIntoItsFiles() {
+        // Первый запуск по букве `TC-6`: ни клона, ни удержанного дерева.
+        val access = FakeAccess()
+        val sources = ActiveSource(store = FakeStore(), folder = access)
+        val model = modelOver(sources)
+        model.start()
+        assertEquals(
+            RootListState.NoSource,
+            model.state,
+            "нет удержанного дерева — пустое состояние (FR-2), а не вечная загрузка",
+        )
+
+        // Пользователь выбрал папку в системном диалоге: право взято, хостинг
+        // называет источник активным и просит перечитать.
+        access.tree = documents
+        access.listing = listOf(note)
+        switchSource(sources, model, FileSourceKind.Folder)
+        model.start()
+
+        val listed = assertIs<RootListState.Listed>(model.state, "выбранная папка показывает свои документы (TC-6)")
+        assertEquals(listOf(note), listed.files)
+        assertEquals("Документы", listed.title)
+    }
+
+    @Test
+    fun TC_7_listFollowsTheActiveSourceInBothDirections() {
+        val folder = FakeAccess().apply {
+            tree = documents
+            listing = listOf(note)
+        }
+        val repository = FakeAccess().apply {
+            tree = TreeSource(id = "repo://docs", displayName = "docs.git")
+            listing = listOf(guide)
+        }
+        val sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = folder, clone = repository)
+        val model = modelOver(sources)
+        model.start()
+        assertEquals(listOf(note), assertIs<RootListState.Listed>(model.state).files)
+
+        switchSource(sources, model, FileSourceKind.Clone)
+        assertEquals(
+            RootListState.Loading,
+            model.state,
+            "содержимое прежнего источника снимается сразу: показывать его под новым именем нельзя",
+        )
+        model.start()
+
+        val ofClone = assertIs<RootListState.Listed>(model.state)
+        assertEquals(listOf(guide), ofClone.files, "переключение меняет содержимое списка (TC-7)")
+        assertEquals("docs.git", ofClone.title, "и заголовок — из того же источника, что файлы")
+
+        switchSource(sources, model, FileSourceKind.Folder)
+        model.start()
+
+        assertEquals(
+            listOf(note),
+            assertIs<RootListState.Listed>(model.state).files,
+            "и обратно: переключение работает в обе стороны, а не в одну",
+        )
+    }
+
+    /**
+     * Тот же дефект «половинки двух источников», что ловит
+     * `TC_5_stateNeverMixesTitleOfOneSourceWithFilesOfAnother`, но на уровне
+     * выше: с `SL-3` смениться может не дерево внутри шва, а сам шов.
+     *
+     * Правка, от которой тест обязан покраснеть: убрать в `read()` сверку
+     * `sources.access !== access` — тогда файлы папки лягут на экран уже
+     * после того, как активным стал репозиторий.
+     */
+    @Test
+    fun TC_7_readingSourceThatChangedMidwayIsDiscardedNotShown() {
+        val folder = FakeAccess().apply {
+            tree = documents
+            listing = listOf(note)
+        }
+        val repository = FakeAccess().apply {
+            tree = TreeSource(id = "repo://docs", displayName = "docs.git")
+            listing = listOf(guide)
+        }
+        val sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = folder, clone = repository)
+        folder.gateListing()
+        val model = modelOver(sources)
+
+        model.start()
+        // Пользователь переключил источник, пока перечисление папки висело.
+        sources.switchTo(FileSourceKind.Clone)
+        folder.releaseAll()
+
+        val listed = assertIs<RootListState.Listed>(model.state)
+        assertEquals("docs.git", listed.title, "на экране источник, который активен сейчас")
+        assertEquals(
+            listOf(guide),
+            listed.files,
+            "результат чтения прежнего источника выбрасывается, а не показывается под именем нового",
+        )
+    }
+
+    /**
+     * `FR-15`: отказ источника не запирает пользователя.
+     *
+     * Оракул — весь путь наружу: из состояния отказа переключение на другой
+     * источник доходит до его файлов. Правка, от которой тест обязан
+     * покраснеть: убрать `this.kind = kind` в `ActiveSource.switchTo` —
+     * переключение перестаёт менять активный источник, и пользователь
+     * остаётся в отказе прежнего. Проверено правкой: тест краснеет.
+     *
+     * Сказано честно: уникальной правки у этого теста нет — он складывает
+     * два уже покрытых куска (отказ становится состоянием с текстом, смена
+     * источника доводит до файлов) в один путь пользователя. Ценность
+     * складывания в том, что путь целиком никто больше не проходит.
+     *
+     * Чего тест *не* проверяет и что поэтому не считается покрытым: доступно
+     * ли меню на экране в состоянии отказа. `menuActions` о состоянии списка
+     * не знает конструктивно, и утверждение про него здесь было бы вакуумным
+     * (находка ревью `SL-3`, раунд 2). Свойство живёт в композиции —
+     * `SourceMenu` поднят над разбором состояний в `RootListScreen`, — и
+     * уходит в ручной прогон `TC-28`.
+     */
+    @Test
+    fun TC_9_failedSourceStillLetsTheUserSwitchAway() {
+        val folder = FakeAccess().apply {
+            tree = documents
+            listError = TreeAccessError.PermissionLost
+        }
+        val repository = FakeAccess().apply {
+            tree = TreeSource(id = "repo://docs", displayName = "docs.git")
+            listing = listOf(guide)
+        }
+        val sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = folder, clone = repository)
+        val model = modelOver(sources)
+        model.start()
+
+        val failed = assertIs<RootListState.Failed>(model.state, "отозванное право — состояние с текстом (FR-15)")
+        assertEquals(TreeAccessError.PermissionLost.userMessage(documents.displayName), failed.message)
+
+        switchSource(sources, model, FileSourceKind.Clone)
+        model.start()
+
+        assertEquals(
+            listOf(guide),
+            assertIs<RootListState.Listed>(model.state).files,
+            "выход из отказа есть и он работает: пользователь не заперт (FR-15)",
+        )
+    }
+
+    /**
+     * Разводка действий меню (`FR-12`) — та самая ветка, которую до находки
+     * ревью `SL-3` держала композиция и потому не проверял никто.
+     *
+     * Правка, от которой тест обязан покраснеть: перепутать местами ветки
+     * `SwitchToFolder`/`SwitchToClone` или заменить любую из них на `Unit` —
+     * пункт меню перестанет что-либо делать, и ни один экранный тест этого не
+     * увидит, потому что экранных тестов в проекте нет.
+     */
+    @Test
+    fun TC_7_menuActionsAreRoutedToTheirEffects() {
+        val folder = FakeAccess().apply {
+            tree = documents
+            listing = listOf(note)
+        }
+        val repository = FakeAccess().apply {
+            tree = TreeSource(id = "repo://docs", displayName = "docs.git")
+            listing = listOf(guide)
+        }
+        val sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = folder, clone = repository)
+        val model = modelOver(sources)
+        var folderDialogs = 0
+        var cloningEntries = 0
+        fun act(action: SourceAction) = applySourceAction(
+            action = action,
+            sources = sources,
+            rootList = model,
+            openFolder = { folderDialogs++ },
+            goCloning = { cloningEntries++ },
+        )
+
+        act(SourceAction.OpenFolder)
+        assertEquals(1, folderDialogs, "«открыть папку» показывает системный диалог, а не меняет источник молча")
+        assertEquals(FileSourceKind.Folder, sources.kind, "и до ответа диалога источник прежний")
+
+        act(SourceAction.Clone)
+        assertEquals(1, cloningEntries, "«клонировать» ведёт на экран клонирования (FR-3)")
+
+        act(SourceAction.SwitchToClone)
+        assertEquals(FileSourceKind.Clone, sources.kind, "переключение доводит выбор до источника (FR-12)")
+        model.start()
+        assertEquals(listOf(guide), assertIs<RootListState.Listed>(model.state).files, "и до списка (FR-7)")
+
+        act(SourceAction.SwitchToFolder)
+        assertEquals(FileSourceKind.Folder, sources.kind, "в обратную сторону — тем же путём")
+        assertEquals(1, folderDialogs, "и без лишнего системного диалога: папку уже выбирали")
+    }
+
+    /**
+     * Единственный сегодня доступный пользователю путь смены источника:
+     * активна папка, и он выбирает *другую* папку тем же действием
+     * `ОТКРЫТЬ ПАПКУ…`. Вид источника при этом не меняется — меняется папка
+     * за ним, и всё поведение держится на том, что такой выбор принимается.
+     *
+     * Правка, от которой тест обязан покраснеть: `if (this.kind == kind)
+     * return false` в `ActiveSource.switchTo` — перечитки не будет, и экран
+     * останется на файлах папки, право на которую платформа уже отдала
+     * (находка ревью `SL-3`).
+     */
+    @Test
+    fun TC_7_choosingAnotherFolderWhileTheFolderIsActiveIsAccepted() {
+        val access = FakeAccess().apply {
+            tree = documents
+            listing = listOf(note)
+        }
+        val sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = access)
+        val model = modelOver(sources)
+        model.start()
+        val tokenBefore = model.sourceToken
+
+        // Платформа взяла право на другую папку: тот же шов, другое дерево.
+        access.tree = TreeSource(id = "tree://other", displayName = "Другая")
+        access.listing = listOf(guide)
+        switchSource(sources, model, FileSourceKind.Folder)
+
+        assertEquals(tokenBefore + 1, model.sourceToken, "выбор другой папки заказывает перечитку")
+        model.start()
+        val listed = assertIs<RootListState.Listed>(model.state)
+        assertEquals("Другая", listed.title, "на экране новая папка, а не та, право на которую отдано")
+        assertEquals(listOf(guide), listed.files)
+    }
+
+    /**
+     * `TC-27` — кейс, дозаявленный слайсом `SL-3` по находке ревью: в спеке
+     * его не было, и носить чужой номер он не должен.
+     *
+     * Несостоявшаяся смена источника не должна двигать список: перечитка гасит
+     * плашку отказа открытия, которую пользователь мог не успеть прочесть
+     * (`TC-23`), и заказывает лишнее чтение того же самого.
+     *
+     * Правка, от которой тест обязан покраснеть: вернуть в `switchSource`
+     * безусловный `rootList.sourceChosen()`.
+     */
+    @Test
+    fun TC_27_refusedSwitchDoesNotDisturbTheList() {
+        val folder = FakeAccess().apply {
+            tree = documents
+            listing = listOf(note)
+        }
+        val sources = ActiveSource(store = FakeStore(FileSourceKind.Folder), folder = folder, clone = null)
+        val model = modelOver(sources)
+        model.start()
+        model.documentOpenFailed("файл не найден")
+        val tokenBefore = model.sourceToken
+
+        switchSource(sources, model, FileSourceKind.Clone)
+
+        assertEquals("файл не найден", model.notice, "отказа открытия несостоявшаяся смена источника не гасит")
+        assertEquals(tokenBefore, model.sourceToken, "и перечитки не заказывает")
+        assertEquals(listOf(note), assertIs<RootListState.Listed>(model.state).files, "список остаётся на месте")
+    }
+
+    /** Хранилище признака активного источника в памяти. */
+    private class FakeStore(private var kind: FileSourceKind? = null) : ActiveSourceStore {
+        override fun loadActiveSource(): FileSourceKind? = kind
+
+        override fun saveActiveSource(kind: FileSourceKind) {
+            this.kind = kind
+        }
+    }
+
     /** Шов-подделка по образцу `EditorScreenModelTest.FakeAccess`. */
     private class FakeAccess : DocumentTreeAccess {
         var tree: TreeSource? = null
@@ -370,16 +658,21 @@ class RootListModelTest {
 
         override fun heldTree(): TreeSource? = tree
 
-        override fun heldSource(): DocumentSource? = null
+        // Список зовёт из шва ровно два метода — `heldTree` и `listDocuments`.
+        // Остальные падают, а не отдают значение: модель, полезшая за
+        // удержанным документом (соблазн реальный — `editorSourceFor` берёт
+        // именно его), должна быть слышна. Ручательство при этом непрямое:
+        // обращения идут из `scope.launch`, и `AssertionError` уходит
+        // обработчику исключений — тест краснеет на несложившемся состоянии,
+        // а не на самом падении (находка ревью `SL-3`, раунд 2).
+        override fun heldSource(): DocumentSource? = fail("список документа не поднимает — это дело хостинга")
 
         override suspend fun open(source: DocumentSource): DocumentOpenResult =
-            DocumentOpenResult.Failed(source, DocumentAccessError.NotFound)
+            fail("список файлов не открывает — открывает редактор")
 
         override suspend fun write(source: DocumentSource, fileText: String): DocumentWriteResult =
-            DocumentWriteResult.Written
+            fail("список не пишет")
 
-        override fun release() {
-            tree = null
-        }
+        override fun release() = fail("право на дерево список не отдаёт")
     }
 }

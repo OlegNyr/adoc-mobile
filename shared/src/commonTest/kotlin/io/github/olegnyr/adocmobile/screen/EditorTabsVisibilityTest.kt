@@ -1,7 +1,5 @@
 package io.github.olegnyr.adocmobile.screen
 
-import io.github.olegnyr.adocmobile.document.DocumentSource
-import io.github.olegnyr.adocmobile.document.TreeSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,9 +21,6 @@ import kotlin.test.assertFalse
  * редактора теперь ровно одно.
  */
 class EditorTabsVisibilityTest {
-
-    private val tree = TreeSource(id = "tree://docs", displayName = "Документы")
-    private val source = DocumentSource(id = "content://doc/1", displayName = "заметка.adoc")
 
     @Test
     fun TC_22_tabsHiddenWithoutOpenDocument() {

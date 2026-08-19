@@ -7,7 +7,6 @@ import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
 import io.github.olegnyr.adocmobile.document.DocumentWriteError
 import io.github.olegnyr.adocmobile.document.DocumentWriteResult
-import io.github.olegnyr.adocmobile.document.TreeAccessError
 import io.github.olegnyr.adocmobile.document.TreeListResult
 import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.document.openDocument
@@ -22,17 +21,23 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Контракт экрана редактора перед хостингом навигации — слайс `SL-2` фичи 009
- * (`FR-4`, `FR-5`; клаузула `TC-3` про «назад» из документа и `TC-23` про
- * отказ открытия).
+ * (`FR-4`, `FR-5`; клаузула `TC-3` про «назад» из документа).
  *
  * Отдельный файл в пространстве фичи 009, а не тесты внутри
  * `EditorScreenModelTest`: там идентификаторы принадлежат фиче 005, и `TC-3`,
  * `TC-9`, `TC-23` в её нумерации заняты совсем другими кейсами. Тест с чужим
  * номером в чужом файле — ровно та болезнь, которую лечило переименование
  * `TC-24`/`TC-25` в спеке 005 (находка ревью `SL-2`).
+ *
+ * По той же причине здесь больше нет отказа открытия: его несёт `TC-6` фичи
+ * 005 — кейс того требования (`FR-9` там), и держать его вторым экземпляром
+ * под номером `TC-23` значило бы записать одну проверку в два покрытия
+ * (находка ревью `SL-2b`). Корневая половина `TC-23` — что текст доживает до
+ * человека — проверяется в `RootListModelTest`.
  *
  * Подделки свои и намеренно тощие: проверяется одно — что модель сообщает
  * хостингу о выходе из документа, и делает это одним путём.
@@ -61,7 +66,6 @@ class EditorHostContractTest {
 
     @Test
     fun TC_3_backReportsClosureOnlyAfterTheTextIsOnDisk() {
-        access.held = document
         access.contents[document.id] = "= Заголовок"
         // Снимок берётся *внутри* колбэка: только так проверяется порядок, а
         // не факт, что к концу теста случилось и то и другое (замечание ревью).
@@ -81,7 +85,6 @@ class EditorHostContractTest {
 
     @Test
     fun TC_3_backIsNotReportedWhileTheWriteFails() {
-        access.held = document
         access.contents[document.id] = "= Заголовок"
         access.writeError = DocumentWriteError.WriteFailed
         val closed = mutableListOf<String?>()
@@ -101,7 +104,6 @@ class EditorHostContractTest {
         // считать, что документ открыт, тело экрана при хостинге не
         // рисовалось, перехват «назад» был выключен — пользователь оставался
         // на пустом экране без выхода (находка ревью `SL-2`).
-        access.held = document
         access.contents[document.id] = "= Заголовок"
         val closed = mutableListOf<String?>()
         val model = model(onDocumentClosed = { notice -> closed += notice })
@@ -113,38 +115,21 @@ class EditorHostContractTest {
         assertEquals(listOf<String?>(null), closed, "смена папки — тоже выход из документа, и он сообщается")
     }
 
-    @Test
-    fun TC_23_openFailureIsReportedEvenWhenTheFolderIsUnreadableToo() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listError = TreeAccessError.PermissionLost
-        access.openError = DocumentAccessError.NotFound
-        val closed = mutableListOf<String?>()
-        val model = model(onDocumentClosed = { notice -> closed += notice })
-
-        model.open(document)
-
-        assertEquals(
-            listOf<String?>(DocumentAccessError.NotFound.userMessage(document.displayName)),
-            closed,
-            "отказ открытия доходит до хостинга независимо от того, читается ли папка",
-        )
-    }
-
     private class FakeRenderer : AdocRenderer {
         override suspend fun render(source: String, diagrams: DiagramOptions): String = source
     }
 
+    /**
+     * Тощая подделка шва: экран документа зовёт из него [open] и [write], и
+     * больше ничего. Остальное падает, а не возвращает значение, — иначе в
+     * тестах заводится подготовка, которую никто не читает.
+     */
     private class FakeAccess : DocumentTreeAccess {
-        var held: DocumentSource? = null
-        var tree: TreeSource? = null
-        var listError: TreeAccessError? = null
-        var openError: DocumentAccessError? = null
         var writeError: DocumentWriteError? = null
         val contents = mutableMapOf<String, String>()
         val written = mutableListOf<Pair<String, String>>()
 
         override suspend fun open(source: DocumentSource): DocumentOpenResult {
-            openError?.let { return DocumentOpenResult.Failed(source, it) }
             val text = contents[source.id]
                 ?: return DocumentOpenResult.Failed(source, DocumentAccessError.NotFound)
             return openDocument(source, text.encodeToByteArray())
@@ -156,22 +141,16 @@ class EditorHostContractTest {
             return DocumentWriteResult.Written
         }
 
-        override fun heldSource(): DocumentSource? = held
+        override fun heldSource(): DocumentSource? =
+            fail("подъём удержанного источника — дело корня (FR-8 фичи 005 с оговоркой 009)")
 
-        override fun heldTree(): TreeSource? = tree
+        override fun heldTree(): TreeSource? =
+            fail("дерево источника экрану документа не нужно (FR-14)")
 
-        override suspend fun listDocuments(): TreeListResult {
-            val heldTree = tree ?: return TreeListResult.Failed(
-                TreeSource("", "папка"),
-                TreeAccessError.PermissionLost,
-            )
-            listError?.let { return TreeListResult.Failed(heldTree, it) }
-            return TreeListResult.Listed(contents.keys.map { DocumentSource(it, it) })
-        }
+        override suspend fun listDocuments(): TreeListResult =
+            fail("список файлов — корневой экран, а не редактор (FR-14)")
 
-        override fun release() {
-            held = null
-            tree = null
-        }
+        override fun release() =
+            fail("право на дерево этот экран не отдаёт")
     }
 }

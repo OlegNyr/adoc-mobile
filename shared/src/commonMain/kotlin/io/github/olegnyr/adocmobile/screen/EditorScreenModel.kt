@@ -10,8 +10,6 @@ import io.github.olegnyr.adocmobile.document.DocumentSource
 import io.github.olegnyr.adocmobile.document.DocumentState
 import io.github.olegnyr.adocmobile.document.DocumentTreeAccess
 import io.github.olegnyr.adocmobile.document.DocumentWriteResult
-import io.github.olegnyr.adocmobile.document.TreeListResult
-import io.github.olegnyr.adocmobile.document.TreeSource
 import io.github.olegnyr.adocmobile.preview.previewPage
 import io.github.olegnyr.adocmobile.render.AdocRenderer
 import kotlinx.coroutines.CoroutineScope
@@ -78,7 +76,8 @@ const val EDITOR_MODIFIED_LABEL: String = "ИЗМЕНЁН · НЕ СОХРАНЁ
  *   экран через `rememberSaveable` (`FR-7`, KDoc [DocumentEditor]);
  * * модель документа и автосохранение — [AutosaveRunner], по экземпляру на
  *   документ: политика рассчитана на один документ (`FR-8`, журнал 004 `SL-4`);
- * * файлы и перечень папки — только через шов [DocumentTreeAccess] (`NFR-6`).
+ * * файлы — только через шов [DocumentTreeAccess] (`NFR-6`); перечень папки
+ *   этот экран не спрашивает, список живёт на корне (`FR-14` фичи 009).
  *
  * События приходят из композиции, то есть с главного потока; класс, как и
  * исполнитель автосохранения, не потокобезопасен намеренно.
@@ -87,8 +86,12 @@ const val EDITOR_MODIFIED_LABEL: String = "ИЗМЕНЁН · НЕ СОХРАНЁ
  * автосохранение всех документов
  * @param onDocumentClosed документ закрыт («назад», `FR-21`) или не открылся;
  * аргумент — текст отказа открытия либо `null`. Через него хостинг навигации
- * (фича 009) возвращает пользователя на корневой список. Умолчание — пустой
- * обработчик: без хостинга экран ведёт себя как прежде.
+ * (фича 009) возвращает пользователя на корневой список и показывает там текст
+ * отказа. Обязателен и умолчания не имеет: своих состояний «без документа» у
+ * экрана не осталось, поэтому пустой обработчик означал бы экран без выхода —
+ * пользователь застревал бы на пустом экране открытия. Ровно этот дефект
+ * возвращался трижды (`FR-5` фичи 009), и цена умолчания здесь — его
+ * четвёртое возвращение, а не удобство вызова.
  * @param clock источник времени в миллисекундах эпохи Unix
  * @param delayUntil ожидание до срока — параметр ради тестов, умолчание — [delay]
  */
@@ -102,7 +105,7 @@ class EditorScreenModel(
     private val delayUntil: suspend (dueAt: Long) -> Unit = { dueAt ->
         delay((dueAt - clock()).coerceAtLeast(0))
     },
-    private val onDocumentClosed: (notice: String?) -> Unit = {},
+    private val onDocumentClosed: (notice: String?) -> Unit,
 ) {
 
     /** Что показывать: наблюдаемое состояние для композиции. */
@@ -279,8 +282,9 @@ class EditorScreenModel(
 
     /**
      * «Назад» из открытого документа — кнопка app bar и системная кнопка/жест
-     * Android (`FR-21`, решение `OQ-8`): закрыть документ и вернуться к списку
-     * документов папки. Право на дерево удержано, системный диалог не нужен.
+     * Android (`FR-21`, решение `OQ-8`): закрыть документ и сообщить об этом
+     * хостингу — вернуть пользователя на корневой список его дело (`FR-4`
+     * фичи 009). Право на дерево удержано, системный диалог не нужен.
      *
      * Перед закрытием — немедленная запись несохранённых правок тем же
      * механизмом, что уход в фон и «Поделиться»
@@ -291,8 +295,9 @@ class EditorScreenModel(
      * автосохранения снимает явная правка или «Повторить запись», и лишь
      * успешная запись открывает путь к списку.
      *
-     * Без открытого документа — тихий no-op: с экрана списка системный «назад»
-     * не перехватывается и сворачивает приложение платформенным поведением.
+     * Без открытого документа — тихий no-op: пока документ читается, «назад»
+     * держит перехват уровня приложения по признаку стека (`FR-5` фичи 009),
+     * и доделывать этой модели нечего.
      */
     fun closeRequested() {
         val open = document as? EditorDocument.Open ?: return
@@ -305,19 +310,12 @@ class EditorScreenModel(
             // Тот же критерий, что у «Поделиться»: закрывать можно то, что
             // легло на диск, — сигнал ждёт совпадения диска с полем либо
             // отказа записи.
+            // Плашка отказа гаснет по правилу «смена документа»
+            // ([writeFailure]): закрытие случается только после успешной
+            // записи, и гореть отказу не над чем.
             val settled = open.runner.documents.first { !it.isModified || it.lastSaveFailed }
-            if (!settled.isModified) closeToFolder()
+            if (!settled.isModified) leaveDocument()
         }
-    }
-
-    /**
-     * Снять корутины закрытого документа и показать список документов папки.
-     *
-     * Плашка отказа гаснет по правилу «смена документа» ([writeFailure]):
-     * закрытие случается только после успешной записи, отказу гореть не над чем.
-     */
-    private fun closeToFolder() {
-        leaveDocument()
     }
 
     /**
