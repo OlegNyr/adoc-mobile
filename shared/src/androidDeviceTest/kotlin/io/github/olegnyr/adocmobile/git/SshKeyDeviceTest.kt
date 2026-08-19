@@ -2,6 +2,9 @@ package io.github.olegnyr.adocmobile.git
 
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.security.Signature
+import net.i2p.crypto.eddsa.EdDSAEngine
+import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -12,13 +15,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Генерация SSH-ключа на устройстве — слайсы `SL-16` и `SL-19` фичи
- * 007-git-sync, `TC-52`, `TC-55`.
+ * Генерация SSH-ключа на устройстве — слайсы `SL-16`, `SL-19` и `SL-21` фичи
+ * 007-git-sync, `TC-52`, `TC-55`, `TC-61`.
  *
- * Device, потому что генерация опирается на криптопровайдер системы и на
- * Android Keystore (через хранилище секретов), а не на подделку: именно эта
- * пара и решается решением `ADR-015`. Логика хранения проверяется без
- * устройства (`SshKeyStoreHostTest`) — здесь настоящие Keystore и провайдер.
+ * Device, потому что хранение опирается на Android Keystore, а генерация — на
+ * криптопровайдер, который обязан приехать в APK и завестись на ART: именно
+ * эта пара и решается решениями `ADR-015` и `ADR-016`. Логика хранения
+ * проверяется без устройства (`SshKeyStoreHostTest`) — здесь настоящие
+ * Keystore и настоящая дексованная библиотека.
  * Сети тест не касается — живой прогон против GitLab остаётся ручным.
  */
 class SshKeyDeviceTest {
@@ -54,16 +58,44 @@ class SshKeyDeviceTest {
         // Пара восстанавливается и годится для подписи — то, ради чего
         // ADR-015 отказался от Keystore.
         val pair = assertNotNull(runBlocking { store().keyPair() }, "пара ключей восстановлена")
-        val signature = java.security.Signature.getInstance("Ed25519")
+        val eddsa = EdDSASecurityProvider()
+        val signature = Signature.getInstance(EdDSAEngine.SIGNATURE_ALGORITHM, eddsa)
         signature.initSign(pair.private)
         signature.update("рукопожатие".encodeToByteArray())
         val signed = signature.sign()
         assertEquals(64, signed.size, "подпись — сырые 64 байта, как требует SSH (не DER, как у Keystore)")
 
-        val verifier = java.security.Signature.getInstance("Ed25519")
+        val verifier = Signature.getInstance(EdDSAEngine.SIGNATURE_ALGORITHM, eddsa)
         verifier.initVerify(pair.public)
         verifier.update("рукопожатие".encodeToByteArray())
         assertTrue(verifier.verify(signed), "публичная часть соответствует приватной")
+    }
+
+    /**
+     * Генерация на устройстве идёт библиотечным бэкендом, а не системным
+     * алгоритмом (`TC-61`, слайс `SL-21`).
+     *
+     * Device-половина важна отдельно от host: прогон идёт на Android 16, где
+     * системный `Ed25519` *есть*, и молчаливый откат на него был бы незаметен
+     * здесь — и отказал бы на `minSdk 26`, где его нет. Кейс краснеет, если
+     * вернуть `KeyPairGenerator.getInstance("Ed25519")`: пара приедет из
+     * Conscrypt.
+     */
+    @Test
+    fun TC_61_keyComesFromTheBundledBackendNotFromThePlatform() {
+        runBlocking { store().generateKey("устройство") }
+        val pair = assertNotNull(runBlocking { store().keyPair() })
+
+        assertEquals(
+            "net.i2p.crypto.eddsa",
+            pair.public.javaClass.`package`?.name,
+            "публичная часть — от бэкенда из APK, а не от системного провайдера",
+        )
+        assertEquals(
+            "net.i2p.crypto.eddsa",
+            pair.private.javaClass.`package`?.name,
+            "и приватная тоже: восстановление пришпилено к тому же провайдеру",
+        )
     }
 
     @Test

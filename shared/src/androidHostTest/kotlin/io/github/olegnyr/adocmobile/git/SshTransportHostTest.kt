@@ -4,6 +4,10 @@ import java.io.File
 import java.nio.file.Files
 import java.security.KeyPair
 import java.security.KeyPairGenerator
+import java.security.SecureRandom
+import net.i2p.crypto.eddsa.EdDSASecurityProvider
+import net.i2p.crypto.eddsa.spec.EdDSAGenParameterSpec
+import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable
 import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -104,12 +108,14 @@ class SshTransportHostTest {
 
     /** Подделка хранилища ключа: настоящее опирается на Android Keystore. */
     private class FakeKeyPairs : SshKeyPairs {
-        // RSA, а не ed25519: содержимое пары для этих кейсов безразлично, а
-        // ed25519 MINA sshd без бэкенда EdDSA не кодирует вовсе (см. отчёт
-        // слайса `SL-20`).
-        private val pair: KeyPair = KeyPairGenerator.getInstance("RSA")
-            .apply { initialize(2048) }
-            .generateKeyPair()
+        // Ed25519 библиотечным провайдером (`ADR-016`) — тот же тип и тот же
+        // бэкенд, что у настоящего ключа устройства. До `SL-21` здесь стоял
+        // RSA: ed25519 sshd без бэкенда не кодировал вовсе, и подделка обязана
+        // была отличаться от продукта.
+        private val pair: KeyPair =
+            KeyPairGenerator.getInstance(EdDSASecurityProvider.PROVIDER_NAME, EdDSASecurityProvider())
+                .apply { initialize(EdDSAGenParameterSpec(EdDSANamedCurveTable.ED_25519), SecureRandom()) }
+                .generateKeyPair()
 
         var stamp: String? = "первый-ключ"
         var beforeKeyPair: (() -> Unit)? = null

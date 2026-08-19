@@ -206,6 +206,51 @@ val verifyJGitPackaged = tasks.register("verifyJGitPackaged") {
     }
 }
 
+/**
+ * Страж бэкенда EdDSA (SL-21 фичи 007, ADR-016): библиотека действительно в APK.
+ *
+ * Она нужна *двум* потребителям в рантайме, и оба молчат при её отсутствии до
+ * самого неудобного момента. Наш ключ ed25519 генерируется её провайдером —
+ * без классов будет `NoSuchAlgorithmException` при первом нажатии «создать
+ * ключ». MINA sshd ищет её *рефлексией*: нет классов — `SecurityUtils`
+ * молча объявляет ed25519 неподдерживаемым, сборка зелёная, тесты на JVM
+ * зелёные (там она есть), а на телефоне рукопожатие с сервером не состоится.
+ *
+ * Пропасть она может тихо: любая правка `implementation(libs.eddsa)` в
+ * `:shared` — и APK собирается без неё. Приём тот же, что у `verifyJGitPackaged`.
+ */
+val verifyEdDsaPackaged = tasks.register("verifyEdDsaPackaged") {
+    group = "verification"
+    description = "Бэкенд EdDSA попал в debug-APK"
+    dependsOn("assembleDebug")
+
+    val apk = layout.buildDirectory.file("outputs/apk/debug/androidApp-debug.apk")
+    inputs.file(apk)
+
+    doLast {
+        // Внутренний класс библиотеки, на который никто извне не ссылается.
+        // Публичные её типы (`EdDSAKey`, `GroupElement`) в качестве иглы не
+        // годятся: sshd скомпилирован против них, и дескрипторы этих типов
+        // лежат в его dex, даже когда самой библиотеки в APK нет — проверено
+        // сборкой без неё, страж на таких иглах проходил вхолостую.
+        val signature = "net/i2p/crypto/eddsa/math/ed25519/Ed25519LittleEndianEncoding"
+            .toByteArray(Charsets.US_ASCII)
+        val found = ZipFile(apk.get().asFile).use { zip ->
+            zip.entries().asSequence()
+                .filter { it.name.matches(Regex("classes\\d*\\.dex")) }
+                .any { entry ->
+                    val bytes = zip.getInputStream(entry).use { it.readBytes() }
+                    bytes.indexOfSubArray(signature) >= 0
+                }
+        }
+        check(found) {
+            "Бэкенд EdDSA не попал в APK: без него не создать свой ключ ed25519 " +
+                "и не предъявить его серверу — sshd ищет библиотеку рефлексией и " +
+                "молча обходится без неё. Вернуть implementation(libs.eddsa) в :shared."
+        }
+    }
+}
+
 /** Поиск подстроки байт — `String(bytes)` на 15-мегабайтном dex дороже и лжива для не-ASCII. */
 fun ByteArray.indexOfSubArray(needle: ByteArray): Int {
     outer@ for (i in 0..size - needle.size) {
@@ -218,7 +263,13 @@ fun ByteArray.indexOfSubArray(needle: ByteArray): Int {
 }
 
 tasks.named("check") {
-    dependsOn(verifyFontsPackaged, verifyRenderStandPackaged, verifyBundlePackagedInRelease, verifyJGitPackaged)
+    dependsOn(
+        verifyFontsPackaged,
+        verifyRenderStandPackaged,
+        verifyBundlePackagedInRelease,
+        verifyJGitPackaged,
+        verifyEdDsaPackaged,
+    )
 }
 
 dependencies {

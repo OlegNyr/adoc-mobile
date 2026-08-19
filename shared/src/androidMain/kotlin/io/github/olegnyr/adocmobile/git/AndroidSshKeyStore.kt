@@ -6,18 +6,29 @@ import java.security.KeyPairGenerator
 import java.security.SecureRandom
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
+import net.i2p.crypto.eddsa.EdDSASecurityProvider
+import net.i2p.crypto.eddsa.spec.EdDSAGenParameterSpec
+import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Генерация и хранение SSH-ключа на Android (`FR-27`, `SL-16`, `SL-19`).
+ * Генерация и хранение SSH-ключа на Android (`FR-27`, `SL-16`, `SL-19`, `SL-21`).
  *
- * Ключ ed25519 создаётся обычным провайдером JCA, приватная часть уходит в
- * хранилище секретов фичи (файл + AES-GCM-ключ из Keystore) — решение
- * xref:../../adr/adr-015-ssh-key-storage.adoc[ADR-015] по итогам спайка:
- * Keystore подписывает ed25519 только в DER и только с `DIGEST_NONE`, а SSH
- * нужны сырые 64 байта, и на `minSdk 26` опереться на Keystore нельзя.
+ * Ключ ed25519 создаётся библиотечным провайдером EdDSA, приватная часть
+ * уходит в хранилище секретов фичи (файл + AES-GCM-ключ из Keystore) —
+ * решение xref:../../adr/adr-015-ssh-key-storage.adoc[ADR-015] по итогам
+ * спайка: Keystore подписывает ed25519 только в DER и только с `DIGEST_NONE`,
+ * а SSH нужны сырые 64 байта, и на `minSdk 26` опереться на Keystore нельзя.
+ *
+ * *Провайдер задан явно* (xref:../../adr/adr-016-eddsa-backend.adoc[ADR-016]),
+ * и это не вкусовщина, а два независимых требования сразу. Системного
+ * алгоритма `Ed25519` на `minSdk 26` нет — генерация отказала бы везде, кроме
+ * свежих устройств. И MINA sshd без своего бэкенда EdDSA ed25519 не знает
+ * вовсе: ключ чужого провайдера он не кодирует в проводной формат и не
+ * подписывает им рукопожатие, то есть предъявить ключ серверу нечем. Оба
+ * свойства закреплены `TC-60` и `TC-61`.
  *
  * *Обе половины пары лежат в одном слоте и пишутся одной записью* (`TC-56`,
  * слайс `SL-19`): публичная строка — открытой частью слота, приватная —
@@ -78,9 +89,9 @@ class AndroidSshKeyStore(
      * пару из разных ключей.
      */
     override suspend fun generateKey(comment: String): SshKeyInfo = withContext(io) {
-        val generator = KeyPairGenerator.getInstance(ALGORITHM)
+        val generator = KeyPairGenerator.getInstance(ALGORITHM, EDDSA_PROVIDER)
         val pair = generator.run {
-            initialize(ED25519_KEY_SIZE, SecureRandom())
+            initialize(EdDSAGenParameterSpec(EdDSANamedCurveTable.ED_25519), SecureRandom())
             generateKeyPair()
         }
 
@@ -131,7 +142,7 @@ class AndroidSshKeyStore(
         val (plain, stored) = secrets.readVerified(SSH_KEY_SLOT) ?: return@withContext null
         val line = parsePublicPart(plain)?.publicKeyLine ?: return@withContext null
         try {
-            val factory = KeyFactory.getInstance(ALGORITHM)
+            val factory = KeyFactory.getInstance(ALGORITHM, EDDSA_PROVIDER)
             val privateKey = factory.generatePrivate(PKCS8EncodedKeySpec(stored))
 
             val body = decodeSshBase64(line.split(" ").getOrNull(1).orEmpty()) ?: return@withContext null
@@ -178,8 +189,20 @@ class AndroidSshKeyStore(
         encoded.copyOfRange(encoded.size - ED25519_RAW_SIZE, encoded.size)
 
     private companion object {
-        const val ALGORITHM = "Ed25519"
-        const val ED25519_KEY_SIZE = 255
+        /**
+         * Провайдер бэкенда, а не системный (`ADR-016`).
+         *
+         * Экземпляр один на класс: `java.security.Provider` — обычный
+         * неизменяемый после `setup()` объект, и заводить его на каждую
+         * генерацию значит платить разбором таблицы алгоритмов. В глобальный
+         * список провайдеров (`Security.addProvider`) он намеренно *не*
+         * ставится: чужой код процесса не должен внезапно получать другую
+         * реализацию `Ed25519`, а sshd поднимает свой экземпляр сам.
+         */
+        val EDDSA_PROVIDER = EdDSASecurityProvider()
+
+        /** Имя алгоритма в этом провайдере — `EdDSA`, не `Ed25519`. */
+        const val ALGORITHM = EdDSASecurityProvider.PROVIDER_NAME
         const val ED25519_RAW_SIZE = 32
         const val UNKNOWN_FINGERPRINT = "SHA256:—"
 

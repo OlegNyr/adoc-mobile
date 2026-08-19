@@ -7,12 +7,17 @@ import java.nio.file.Files
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.PublicKey
+import java.security.SecureRandom
 import java.security.interfaces.ECPublicKey
 import java.security.interfaces.RSAPublicKey
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import net.i2p.crypto.eddsa.EdDSAPublicKey
+import net.i2p.crypto.eddsa.EdDSASecurityProvider
+import net.i2p.crypto.eddsa.spec.EdDSAGenParameterSpec
+import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,15 +39,16 @@ import kotlin.test.assertTrue
  * публикации сервера. Сверить его было нельзя никогда, и единственным
  * работающим поведением оставалось «доверять вслепую».
  *
- * Типы в наборе — `ssh-rsa` и `ecdsa-sha2-nistp256`: именно их предъявляют
- * самостоятельно развёрнутые GitLab и Gitea, и именно на них прежний расчёт
- * давал мусор. Ключа `ssh-ed25519` в наборе нет намеренно — MINA sshd без
- * бэкенда EdDSA (`net.i2p.crypto:eddsa` либо BouncyCastle) такой ключ не
- * кодирует вовсе (`SecurityUtils.isEDDSACurveSupported() == false`), и это
- * отдельная находка, вынесенная вопросом координатору: она касается не
- * сверки ключа сервера, а самой возможности предъявить *свой* ed25519-ключ.
- * Здесь закреплено лишь то, что несериализуемый ключ получает отказ, а не
- * молчаливое доверие.
+ * Типы в наборе — `ssh-rsa`, `ecdsa-sha2-nistp256` и `ssh-ed25519`: первые два
+ * предъявляют самостоятельно развёрнутые GitLab и Gitea, и именно на них
+ * прежний расчёт давал мусор; третий — умолчание современных серверов, включая
+ * gitlab.com. До слайса `SL-21` ed25519 в наборе не было, и не по недосмотру:
+ * MINA sshd без бэкенда EdDSA такой ключ не кодирует вовсе, и сервер с ним
+ * получал отказ *без вопроса пользователю*. Бэкенд подключён
+ * (xref:../../adr/adr-016-eddsa-backend.adoc[ADR-016]), и ветка закрыта
+ * кейсом: убери зависимость — `TC_53_…` покраснеет на ed25519-ключе.
+ * Отдельно закреплено, что несериализуемый ключ *любого* типа получает отказ,
+ * а не молчаливое доверие.
  */
 class ServerKeyDatabaseHostTest {
 
@@ -62,7 +68,7 @@ class ServerKeyDatabaseHostTest {
     fun TC_53_fingerprintIsComputedFromTheWireFormatOfItsOwnKeyType() {
         // Ожидание считается независимо — по RFC 4253 и RFC 5656, — а не тем
         // же кодом: иначе тест подтверждал бы сам себя.
-        listOf(rsaKey(), ecdsaKey()).forEach { key ->
+        listOf(rsaKey(), ecdsaKey(), ed25519Key()).forEach { key ->
             trust.reset()
             database().accept(HOST, ADDRESS, key, null, null)
 
@@ -76,7 +82,7 @@ class ServerKeyDatabaseHostTest {
 
     @Test
     fun TC_53_fingerprintsOfDifferentKeyTypesDoNotCollide() {
-        val fingerprints = listOf(rsaKey(), rsaKey(), ecdsaKey()).map { key ->
+        val fingerprints = listOf(rsaKey(), rsaKey(), ecdsaKey(), ed25519Key(), ed25519Key()).map { key ->
             trust.reset()
             database().accept(HOST, ADDRESS, key, null, null)
             trust.lastFingerprint
@@ -142,14 +148,50 @@ class ServerKeyDatabaseHostTest {
         // Обрезанная строка (обрыв записи в чужой реализации, ручная правка)
         // не разбирается как валидная запись — иначе ложная тревога «ключ
         // сервера сменился» приучала бы жать «доверять».
-        // Обрезанный блоб *поддерживаемого* типа: возьми здесь ed25519 —
-        // строка отбрасывалась бы из-за отсутствия бэкенда EdDSA, а не из-за
-        // обрезки, и тест был бы зелёным по неверной причине (ревью SL-20).
+        // Обрезанный блоб *поддерживаемого* типа: тип, которого библиотека не
+        // знает, отбрасывался бы сам по себе, и кейс был бы зелёным по неверной
+        // причине (ревью SL-20). До `SL-21` таким типом был и ed25519 — теперь
+        // он поддержан, но `ssh-rsa` здесь оставлен: свойство про обрезку, а не
+        // про тип.
         knownHosts.appendText("$HOST ssh-rsa AAAAB3NzaC1yc2E\n")
         trust.reset()
         assertTrue(database().accept(HOST, ADDRESS, server, null, null), "целая запись всё ещё узнаётся")
         assertEquals(0, trust.calls)
         assertEquals(1, database().lookup(HOST, ADDRESS, null).size, "битая строка в перечень не попадает")
+    }
+
+    /**
+     * Ключ сервера типа `ssh-ed25519` проходит весь цикл (`SL-21`).
+     *
+     * Это умолчание современных серверов, и до подключения бэкенда такой хост
+     * получал отказ *без вопроса пользователю*: сериализовать ключ было нечем,
+     * а `accept` на несериализуемом ключе возвращает `false`. Кейс краснеет,
+     * если убрать `net.i2p.crypto:eddsa` из каталога.
+     */
+    @Test
+    fun TC_54_ed25519HostKeyGoesThroughTheWholeCycle() {
+        trust.answer = true
+        val server = ed25519Key()
+        assertTrue(database().accept(HOST, ADDRESS, server, null, null), "ключ ed25519 предъявлен человеку и принят")
+        assertEquals(1, trust.calls, "вопрос задан — а не отказ без вопроса, как было до бэкенда")
+
+        val parts = knownHosts.readLines().single { it.startsWith("$HOST ") }.split(" ")
+        assertEquals("ssh-ed25519", parts[1], "в файле — тот же тип, что пишет настоящий ssh")
+        assertEquals(
+            expectedWireFormat(server).toList(),
+            Base64.getDecoder().decode(parts[2]).toList(),
+            "записан ключ целиком в проводном формате",
+        )
+
+        trust.reset()
+        assertTrue(database().accept(HOST, ADDRESS, server, null, null), "тот же ключ вопроса не задаёт")
+        assertEquals(0, trust.calls)
+        assertEquals(1, database().lookup(HOST, ADDRESS, null).size, "набор алгоритмов сужен записанным ключом")
+
+        trust.reset()
+        trust.answer = false
+        assertFalse(database().accept(HOST, ADDRESS, ed25519Key(), null, null), "отказ пользователя рвёт соединение")
+        assertTrue(trust.lastChanged, "другой ed25519-ключ того же хоста — это смена ключа, а не незнакомый сервер")
     }
 
     @Test
@@ -258,6 +300,9 @@ class ServerKeyDatabaseHostTest {
                 field(point)
         }
 
+        // RFC 8709: тип и сырые 32 байта точки, никаких обёрток.
+        is EdDSAPublicKey -> field("ssh-ed25519".encodeToByteArray()) + field(key.abyte)
+
         else -> error("в наборе только те типы, чей проводной формат тест считает сам")
     }
 
@@ -289,6 +334,16 @@ class ServerKeyDatabaseHostTest {
     private fun ecdsaKey(): PublicKey = KeyPairGenerator.getInstance("EC")
         .apply { initialize(ECGenParameterSpec("secp256r1")) }
         .generateKeyPair().public
+
+    /**
+     * Ключ сервера типа `ssh-ed25519` — библиотечным провайдером (`ADR-016`),
+     * а не системным: sshd понимает ключи своего бэкенда, и подделывать здесь
+     * ключ чужого провайдера значило бы проверять не тот путь.
+     */
+    private fun ed25519Key(): PublicKey =
+        KeyPairGenerator.getInstance(EdDSASecurityProvider.PROVIDER_NAME, EdDSASecurityProvider())
+            .apply { initialize(EdDSAGenParameterSpec(EdDSANamedCurveTable.ED_25519), SecureRandom()) }
+            .generateKeyPair().public
 
     /** Подделка решения человека: реальный ответ приходит с экрана. */
     private class RecordingTrust : HostKeyTrust {

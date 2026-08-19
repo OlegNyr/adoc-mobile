@@ -27,6 +27,12 @@ androidxTestRunner = "1.7.0"
 # :androidApp через implementation; страж — verifyJGitPackaged.
 jgit = "7.7.1.202607240634-r"
 
+# Криптографический бэкенд EdDSA для MINA sshd и для генерации своего ключа
+# (ADR-016). Без него sshd ed25519 не знает вовсе: ключ не кодируется в
+# проводной формат, а системного алгоритма `Ed25519` на minSdk 26 нет.
+# Чистая Java без нативных частей; последний релиз линии 0.3.x.
+eddsa = "0.3.0"
+
 # Корутины: код зависит от них напрямую (Flow в контракте GitSync, suspend-швы,
 # модели экранов), и версия обязана быть решением каталога, а не тем, что
 # случайно притащил Compose. Значение совпадает с транзитивной версией Compose
@@ -62,6 +68,11 @@ jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 # :shared (дексация device-тестов KMP-модуля не пропускает records), рантайм
 # и тестовый APK — из :androidApp.
 jgit-ssh-apache = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.apache", version.ref = "jgit" }
+# Бэкенд EdDSA (ADR-016). Подключается обычным implementation, а не приёмом
+# jgit: records в нём нет, дексацию device-тестов KMP-модуля он не ломает.
+# Нужен и нам (генерация ключа), и sshd в рантайме — страж упаковки в APK
+# живёт рядом с verifyJGitPackaged.
+eddsa = { module = "net.i2p.crypto:eddsa", version.ref = "eddsa" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 
 [plugins]

@@ -1,9 +1,10 @@
 package io.github.olegnyr.adocmobile.git
 
-import java.io.IOException
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
+import net.i2p.crypto.eddsa.EdDSAEngine
+import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -122,87 +123,29 @@ class SshKeyStoreHostTest {
     /**
      * Публичная часть, показанная экраном, обязана соответствовать приватной:
      * подпись парой проверяется ключом, собранным *из строки на экране*.
+     *
+     * Провайдер — библиотечный (`ADR-016`), как и в продуктовом коде: системный
+     * `Ed25519` чужую пару не принимает вовсе, а на `minSdk 26` его и нет.
+     * Независимость проверки от продуктового кода держится не на провайдере, а
+     * на том, что публичный ключ пересобирается здесь *из строки экрана*.
      */
     private fun assertPairMatchesLine(publicKeyLine: String) {
         val pair = assertNotNull(runBlocking { store().keyPair() }, "пара ключей собирается")
         val raw = assertNotNull(decodeSshBase64(publicKeyLine.split(" ")[1])).takeLast(32).toByteArray()
         val spki = byteArrayOf(0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00) + raw
-        val shown = KeyFactory.getInstance("Ed25519").generatePublic(X509EncodedKeySpec(spki))
+        val eddsa = EdDSASecurityProvider()
+        val shown = KeyFactory.getInstance(EdDSASecurityProvider.PROVIDER_NAME, eddsa)
+            .generatePublic(X509EncodedKeySpec(spki))
 
-        val signature = Signature.getInstance("Ed25519")
+        val signature = Signature.getInstance(EdDSAEngine.SIGNATURE_ALGORITHM, eddsa)
         signature.initSign(pair.private)
         signature.update("рукопожатие".encodeToByteArray())
         val signed = signature.sign()
 
-        val verifier = Signature.getInstance("Ed25519")
+        val verifier = Signature.getInstance(EdDSAEngine.SIGNATURE_ALGORITHM, eddsa)
         verifier.initVerify(shown)
         verifier.update("рукопожатие".encodeToByteArray())
         assertTrue(verifier.verify(signed), "строка на экране — от того же ключа, которым подписывает транспорт")
     }
 
-    /**
-     * Подделка хранилища секретов: настоящее опирается на Android Keystore и
-     * проверяется device-кейсами. Здесь важен *контракт* — слоты независимы,
-     * открытая часть читается без расшифровки, отданный массив потребляется
-     * немедленно (вызывающий затирает его сразу после возврата).
-     */
-    private class FakeSecretStore : GitSecretStore {
-
-        private val plain = mutableMapOf<String, ByteArray>()
-        private val secret = mutableMapOf<String, ByteArray>()
-        private val tampered = mutableSetOf<String>()
-
-        var writes = 0
-            private set
-        val touchedSlots = mutableSetOf<String>()
-
-        var secretReads = 0
-        var failNextStore = false
-        var lastStoredSecret: ByteArray? = null
-            private set
-        var lastReadSecret: ByteArray? = null
-            private set
-
-        override fun store(slot: String, secret: ByteArray, plain: ByteArray) {
-            if (failNextStore) {
-                failNextStore = false
-                throw IOException("запись не удалась")
-            }
-            lastStoredSecret = secret
-            this.secret[slot] = secret.copyOf()
-            this.plain[slot] = plain.copyOf()
-            tampered -= slot
-            touchedSlots += slot
-            writes += 1
-        }
-
-        override fun readSecret(slot: String): ByteArray? {
-            // Подменённая открытая часть ломает тег GCM — секрет не читается.
-            if (slot in tampered) return null
-            val stored = secret[slot] ?: return null
-            secretReads += 1
-            return stored.copyOf().also { lastReadSecret = it }
-        }
-
-        override fun readPlain(slot: String): ByteArray? = plain[slot]?.copyOf()
-
-        override fun readVerified(slot: String): Pair<ByteArray, ByteArray>? {
-            if (slot in tampered) return null
-            val open = plain[slot]?.copyOf() ?: return null
-            val stored = readSecret(slot) ?: return null
-            return open to stored
-        }
-
-        override fun stamp(slot: String): String? = if (slot in secret) "запись-$writes" else null
-
-        override fun clear(slot: String) {
-            secret.remove(slot)
-            plain.remove(slot)
-        }
-
-        fun corruptPlain(slot: String, replacement: String? = null) {
-            plain[slot] = replacement?.encodeToByteArray() ?: byteArrayOf(0x00, 0x01, 0x02)
-            tampered += slot
-        }
-    }
 }
