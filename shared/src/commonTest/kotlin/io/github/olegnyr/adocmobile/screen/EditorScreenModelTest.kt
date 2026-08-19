@@ -71,7 +71,7 @@ class EditorScreenModelTest {
         access.contents[held.id] = "= Заголовок\n\nАбзац."
         val model = model()
 
-        model.start()
+        model.open(held)
 
         val runner = model.openRunner()
         assertEquals("= Заголовок\n\nАбзац.", model.editor.textFieldState.text.toString())
@@ -81,92 +81,13 @@ class EditorScreenModelTest {
     }
 
     @Test
-    fun TC_5_startWithoutHeldSourceAndTreeStaysWithoutFolder() {
-        val model = model()
-
-        model.start()
-
-        assertIs<EditorDocument.NoFolder>(model.document)
-        assertEquals(0, access.openCalls, "без удержанного источника шов не дёргается")
-    }
-
-    /**
-     * Кейсы папки (этот и три следующих) заведены реализацией `SL-3` по решению
-     * владельца `OQ-1` («папка, затем файл в ней»): в спеке 005 идентификаторов
-     * для них нет — аналитика писалась до решения о tree-доступе. Дозаявление
-     * `TC-*` — правка `doc/`, вне зоны слайса; пробел назван в отчёте слайса.
-     * Наблюдаемое поведение — `FR-1a` фичи 004 на уровне экрана.
-     */
-    @Test
-    fun startWithHeldTreeWithoutDocumentListsFolder() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
-        val model = model()
-
-        model.start()
-
-        val browsing = assertIs<EditorDocument.Browsing>(model.document)
-        assertEquals("Документы", browsing.tree.displayName)
-        assertEquals(listOf(held), browsing.documents)
-        assertNull(browsing.notice)
-    }
-
-    @Test
-    fun startWithEmptyFolderBrowsesEmptyList() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = emptyList()
-        val model = model()
-
-        model.start()
-
-        val browsing = assertIs<EditorDocument.Browsing>(model.document)
-        assertEquals(
-            emptyList<DocumentSource>(),
-            browsing.documents,
-            "папка без документов — пустой список, не ошибка (FR-1a фичи 004)",
-        )
-    }
-
-    @Test
-    fun listingFailureShowsFolderMessage() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listError = TreeAccessError.PermissionLost
-        val model = model()
-
-        model.start()
-
-        val failed = assertIs<EditorDocument.FolderFailed>(model.document)
-        assertEquals(TreeAccessError.PermissionLost.userMessage("Документы"), failed.message)
-    }
-
-    @Test
-    fun folderChosenListsAndDocumentChoiceOpensEditor() {
-        val model = model()
-        model.start()
-        assertIs<EditorDocument.NoFolder>(model.document)
-
-        // Платформа взяла право на дерево — holder перечисляет его документы.
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
-        access.contents[held.id] = "= Заголовок"
-        model.folderChosen()
-        assertIs<EditorDocument.Browsing>(model.document)
-
-        // Выбор документа из списка открывает его в редакторе.
-        model.open(held)
-        val runner = model.openRunner()
-        assertEquals(held, runner.document.source)
-        assertEquals("= Заголовок", model.editor.textFieldState.text.toString())
-    }
-
-    @Test
     fun TC_5_openingAnotherDocumentDropsPendingWriteOfPrevious() {
         access.held = held
         access.contents[held.id] = "первый"
         val other = DocumentSource(id = "content://doc/2", displayName = "другой.adoc")
         access.contents[other.id] = "второй"
         val model = model()
-        model.start()
+        model.open(held)
         val firstRunner = model.openRunner()
 
         // Правка первого документа повисла в паузе автосохранения…
@@ -193,7 +114,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "= Заголовок"
         val model = model()
-        model.start()
+        model.open(held)
         val runner = model.openRunner()
 
         assertEquals("заметка.adoc", runner.document.source.displayName)
@@ -213,7 +134,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
         val runner = model.openRunner()
 
         model.textEdited("исходный правленый")
@@ -226,34 +147,18 @@ class EditorScreenModelTest {
     }
 
     @Test
-    fun TC_6_openFailureShowsUserMessageAndReturnsToFolderList() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
+    fun TC_6_openFailureLeavesNothingOpenAndNothingInTheField() {
         access.held = held
         access.openError = DocumentAccessError.NotFound
         val model = model()
 
-        model.start()
+        model.open(held)
 
-        val browsing = assertIs<EditorDocument.Browsing>(model.document, "отказ открытия возвращает к списку (FR-9)")
-        assertEquals(DocumentAccessError.NotFound.userMessage("заметка.adoc"), browsing.notice)
+        assertIs<EditorDocument.Opening>(model.document, "документ не открылся — открывать нечего")
         assertEquals("", model.editor.textFieldState.text.toString(), "в поле ничего не загружено (FR-9)")
-    }
-
-    @Test
-    fun TC_6_openFailureWithDeadTreeShowsFolderMessage() {
-        // Право на дерево отозвано: и файл не открывается, и папка не
-        // перечисляется — пользователь видит сообщение о папке и выбор заново.
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listError = TreeAccessError.PermissionLost
-        access.held = held
-        access.openError = DocumentAccessError.PermissionLost
-        val model = model()
-
-        model.start()
-
-        val failed = assertIs<EditorDocument.FolderFailed>(model.document)
-        assertEquals(TreeAccessError.PermissionLost.userMessage("Документы"), failed.message)
+        // Куда попадает пользователь и где видит текст отказа — забота
+        // хостинга навигации; это проверяет `EditorHostContractTest` (`TC-23`
+        // фичи 009). Список из этого экрана уехал вместе со слайсом `SL-2b`.
     }
 
     @Test
@@ -261,7 +166,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
 
         model.textEdited("исходный правленый")
         assertEquals(0, access.written.size, "до паузы записи нет")
@@ -285,7 +190,7 @@ class EditorScreenModelTest {
         access.contents[held.id] = "исходный"
         access.writeError = DocumentWriteError.PermissionLost
         val model = model()
-        model.start()
+        model.open(held)
         val runner = model.openRunner()
 
         model.typeText("исходный правленый")
@@ -313,7 +218,7 @@ class EditorScreenModelTest {
         access.contents[held.id] = "исходный"
         access.writeError = DocumentWriteError.WriteFailed
         val model = model()
-        model.start()
+        model.open(held)
 
         model.textEdited("исходный правленый")
         now = AutosavePolicy.DEFAULT_PAUSE_MILLIS + 1
@@ -344,7 +249,7 @@ class EditorScreenModelTest {
         assertTrue(editor.canUndo)
         val model = model(editor)
 
-        model.start(fieldSourceId = held.id)
+        model.open(held, keepField = true)
 
         model.openRunner()
         assertEquals("= Заголовок", editor.textFieldState.text.toString())
@@ -359,7 +264,7 @@ class EditorScreenModelTest {
         val editor = DocumentEditor(TextFieldState("= Заголовок правленый"))
         val model = model(editor)
 
-        model.start(fieldSourceId = held.id)
+        model.open(held, keepField = true)
 
         val runner = model.openRunner()
         assertEquals("= Заголовок правленый", editor.textFieldState.text.toString(), "правка не перетёрта диском")
@@ -379,7 +284,7 @@ class EditorScreenModelTest {
         val editor = DocumentEditor(TextFieldState("чужой текст"))
         val model = model(editor)
 
-        model.start(fieldSourceId = "content://doc/устаревший")
+        model.open(held, keepField = false)
 
         model.openRunner()
         assertEquals("= Заголовок", editor.textFieldState.text.toString(), "документ загружен с диска")
@@ -392,7 +297,7 @@ class EditorScreenModelTest {
         val other = DocumentSource(id = "content://doc/2", displayName = "другой.adoc")
         access.contents[other.id] = "второй"
         val model = model()
-        model.start()
+        model.open(held)
 
         // Пока превью скрыто, правки не рождают ни одного рендера (TC-11).
         // Правка идёт через поле, как в продукте: пайплайн берёт снимок текста
@@ -428,7 +333,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
 
         model.typeText("исходный правленый")
         assertTrue(model.editor.canUndo, "после правки есть что отменять (FR-16)")
@@ -451,8 +356,7 @@ class EditorScreenModelTest {
     fun TC_15_undoRedoWithEmptyHistoryDoNothingAndDoNotThrow() {
         // Без документа: полю неоткуда взять историю — тихий no-op (FR-16).
         val bare = model()
-        bare.start()
-        assertIs<EditorDocument.NoFolder>(bare.document)
+        assertIs<EditorDocument.Opening>(bare.document, "документ не открывали — открывать нечего")
         bare.undoRequested()
         bare.redoRequested()
 
@@ -461,7 +365,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
         assertFalse(model.editor.canUndo, "пустая история — пункт «Отменить» недоступен")
         assertFalse(model.editor.canRedo, "пустая история — пункт «Повторить» недоступен")
         model.undoRequested()
@@ -475,7 +379,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
         val runner = model.openRunner()
 
         // Превью видно: первый рендер — немедленно, исходным текстом.
@@ -503,7 +407,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
 
         model.typeText("исходный правленый")
         assertEquals(0, access.written.size, "до паузы записи нет — правка ещё не на диске")
@@ -529,7 +433,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
 
         val shared = mutableListOf<DocumentSource>()
         model.shareRequested { shared += it }
@@ -541,8 +445,7 @@ class EditorScreenModelTest {
     @Test
     fun TC_20_shareWithoutOpenDocumentIsSilentNoOp() {
         val model = model()
-        model.start()
-        assertIs<EditorDocument.NoFolder>(model.document)
+        assertIs<EditorDocument.Opening>(model.document, "документ не открывали")
 
         var sent = false
         model.shareRequested { sent = true }
@@ -557,7 +460,7 @@ class EditorScreenModelTest {
         access.contents[held.id] = "исходный"
         access.writeError = DocumentWriteError.PermissionLost
         val model = model()
-        model.start()
+        model.open(held)
 
         model.typeText("исходный правленый")
         var sent = false
@@ -579,7 +482,7 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
         model.openRunner()
 
         model.typeText("исходный правленый")
@@ -592,11 +495,10 @@ class EditorScreenModelTest {
             access.written,
             "перед закрытием — немедленная запись несохранённой правки (FR-21)",
         )
-        val browsing = assertIs<EditorDocument.Browsing>(
+        assertIs<EditorDocument.Opening>(
             model.document,
-            "документ закрыт — экран вернулся к списку документов папки (TC-21)",
+            "документ закрыт; куда попадёт пользователь — решает хостинг (TC-21)",
         )
-        assertEquals(listOf(held), browsing.documents)
     }
 
     @Test
@@ -606,13 +508,13 @@ class EditorScreenModelTest {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
-        model.start()
+        model.open(held)
         model.openRunner()
 
         model.closeRequested()
 
         assertEquals(0, access.written.size, "без расхождения с диском записи нет (FR-21)")
-        assertIs<EditorDocument.Browsing>(model.document, "файл на диске совпадает с полем — закрытие немедленное")
+        assertIs<EditorDocument.Opening>(model.document, "файл на диске совпадает с полем — закрытие немедленное")
     }
 
     @Test
@@ -623,7 +525,7 @@ class EditorScreenModelTest {
         access.contents[held.id] = "исходный"
         access.writeError = DocumentWriteError.PermissionLost
         val model = model()
-        model.start()
+        model.open(held)
 
         model.typeText("исходный правленый")
         model.closeRequested()
@@ -644,47 +546,25 @@ class EditorScreenModelTest {
     @Test
     fun TC_21_backWithoutOpenDocumentIsSilentNoOp() {
         val model = model()
-        model.start()
-        assertIs<EditorDocument.NoFolder>(model.document)
+        assertIs<EditorDocument.Opening>(model.document, "документ не открывали")
 
         model.closeRequested()
 
-        assertIs<EditorDocument.NoFolder>(model.document, "без открытого документа закрывать нечего (FR-21)")
+        assertIs<EditorDocument.Opening>(model.document, "без открытого документа закрывать нечего (FR-21)")
         assertEquals(0, access.written.size, "no-op не рождает записи")
     }
 
     @Test
-    fun TC_21_startWithoutLiftingHeldSourceBrowsesFolder() {
-        // Пользователь закрыл документ кнопкой «назад», затем поворот: экран
-        // восстанавливает список, а не поднимает закрытый документ заново.
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
+    fun TC_22_tabsAppearWithDocumentAndDisappearWhenItCloses() {
         access.held = held
         access.contents[held.id] = "исходный"
         val model = model()
 
-        model.start(liftHeldSource = false)
-
-        val browsing = assertIs<EditorDocument.Browsing>(
-            model.document,
-            "закрытый документ не поднимается после поворота (FR-21)",
-        )
-        assertEquals(listOf(held), browsing.documents)
-        assertEquals(0, access.openCalls, "удержанный источник не открывается")
-    }
-
-    @Test
-    fun TC_22_tabsAppearWithDocumentAndDisappearOnReturnToList() {
-        access.tree = TreeSource(id = "tree://docs", displayName = "Документы")
-        access.listing = listOf(held)
-        access.held = held
-        access.contents[held.id] = "исходный"
-        val model = model()
-
-        // Список папки: полосы вкладок нет (FR-22).
-        model.start(liftHeldSource = false)
-        assertIs<EditorDocument.Browsing>(model.document)
-        assertFalse(editorTabsVisible(model.document), "на списке документов вкладок нет (TC-22)")
+        // Документ ещё не открыт: полосы вкладок нет (FR-22). Раньше носителем
+        // этого состояния был список папки внутри редактора; список уехал в
+        // корень (`SL-2b` фичи 009), а требование осталось прежним — вкладки
+        // принадлежат документу.
+        assertFalse(editorTabsVisible(model.document), "без документа вкладок нет (TC-22)")
 
         // Документ открыт: вкладки появляются, активна РЕДАКТОР.
         model.open(held)
@@ -701,10 +581,10 @@ class EditorScreenModelTest {
             "пока документ открыт, выбор вкладки пользователя не сбрасывается (FR-2)",
         )
 
-        // Возврат к списку кнопкой «назад» (FR-21): вкладки исчезают.
+        // Закрытие кнопкой «назад» (FR-21): вкладки исчезают.
         model.closeRequested()
-        assertIs<EditorDocument.Browsing>(model.document)
-        assertFalse(editorTabsVisible(model.document), "возврат к списку убирает вкладки (TC-22)")
+        assertIs<EditorDocument.Opening>(model.document)
+        assertFalse(editorTabsVisible(model.document), "закрытие документа убирает вкладки (TC-22)")
     }
 
     /** Правка как в продукте: сначала поле, затем событие модели (подписка `snapshotFlow`). */

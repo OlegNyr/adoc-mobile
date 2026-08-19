@@ -142,10 +142,8 @@ internal fun editorTabAfter(document: EditorDocument, selected: EditorTab): Edit
  * намерение источником уже записанного файла, платформа показывает диалог
  * `ACTION_SEND` — тем же разделением, что у [requestFolder].
  * @param openSource документ, который просит открыть хостинг навигации
- * (`FR-1` фичи 009). `null` — прежнее поведение: экран сам поднимает
- * удержанный источник и сам показывает список папки.
- * Строительные леса на время слайса `SL-2` фичи 009: список уходит из этого
- * экрана в корень, и с `SL-2b` останется только ветка хостинга.
+ * (`FR-1` фичи 009). Обязателен: экран существует только при документе —
+ * список файлов принадлежит корневому экрану (`FR-14` фичи 009, ADR-013).
  * @param onDocumentClosed документ закрыт («назад», `FR-21`) или не открылся;
  * аргумент — текст отказа открытия (`FR-9`) либо `null`. Хостинг возвращается
  * на корневой список и показывает текст там.
@@ -158,8 +156,8 @@ fun EditorScreen(
     foreground: Boolean = true,
     imageSource: PreviewImageSource? = null,
     shareDocument: (DocumentSource) -> Unit = {},
-    openSource: DocumentSource? = null,
-    onDocumentClosed: (notice: String?) -> Unit = {},
+    openSource: DocumentSource,
+    onDocumentClosed: (notice: String?) -> Unit,
 ) {
     AdocTheme {
         Surface(
@@ -188,20 +186,10 @@ fun EditorScreen(
             // не станет перетирать восстановленное поле чтением с диска (FR-7).
             var fieldSourceId by rememberSaveable { mutableStateOf<String?>(null) }
 
-            // Пользователь на списке, а не в документе: после «назад» (FR-21)
-            // поворот и выгрузка процесса восстанавливают список — start не
-            // поднимает закрытый документ обратно. Флаг выводится из состояния
-            // модели: любой путь к списку (закрытие, смена папки) его ставит,
-            // открытие документа — снимает.
-            var viewingList by rememberSaveable { mutableStateOf(false) }
+            // Что открыто, решает хостинг навигации: своего подъёма и своего
+            // списка у экрана больше нет (`FR-14` фичи 009).
             LaunchedEffect(model, openSource) {
-                if (openSource != null) {
-                    // Хостинг сам решил, что открыто: своего подъёма и своего
-                    // списка экран в этом режиме не заводит.
-                    model.open(openSource, keepField = openSource.id == fieldSourceId)
-                } else {
-                    model.start(fieldSourceId, liftHeldSource = !viewingList)
-                }
+                model.open(openSource, keepField = openSource.id == fieldSourceId)
             }
 
             // Выбранная вкладка объявлена до подписки на состояние: закрытие
@@ -213,7 +201,6 @@ fun EditorScreen(
                 if (document is EditorDocument.Open) {
                     fieldSourceId = document.runner.document.source.id
                 }
-                viewingList = document !is EditorDocument.Open
                 // Закрытие документа сбрасывает выбор вкладки (FR-22): следующий
                 // документ открывается редактором, а не превью прежнего.
                 selectedTabName = editorTabAfter(document, EditorTab.valueOf(selectedTabName)).name
@@ -379,43 +366,10 @@ fun EditorScreen(
                             )
                         }
 
-                        // Состояния без документа — наследство: список папки
-                        // жил внутри редактора, пока корня не существовало.
-                        // При хостинге навигации (`openSource != null`) они не
-                        // рисуются вовсе: список в приложении один (`FR-14`
-                        // фичи 009, ADR-013), и мелькнуть вторым нельзя — ни
-                        // кадром до открытия, ни кадром после закрытия, пока
-                        // хостинг уводит на корень. Ветки уходят целиком
-                        // слайсом `SL-2b`.
-                        //
-                        // Вместо них при хостинге — имя открываемого файла в
-                        // шапке: чтение через SAF занимает заметное время, и
-                        // пустой экран без единой подписи читается как сбой.
-                        // У корня состояние загрузки есть, у документа не было
-                        // (замечание ревью `SL-2`).
-                        EditorDocument.NoFolder -> if (openSource == null) {
-                            EmptyState(
-                                label = "ПАПКА НЕ ВЫБРАНА",
-                                message = "Выберите папку с документами AsciiDoc, чтобы начать работу.",
-                                onOpenFolder = openFolder,
-                            )
-                        }
-
-                        is EditorDocument.FolderFailed -> if (openSource == null) {
-                            EmptyState(
-                                label = "ПАПКА НЕДОСТУПНА",
-                                message = document.message,
-                                onOpenFolder = openFolder,
-                            )
-                        }
-
-                        is EditorDocument.Browsing -> if (openSource == null) {
-                            FolderDocuments(
-                                browsing = document,
-                                onOpenDocument = model::open,
-                                onOpenFolder = openFolder,
-                            )
-                        }
+                        // Документ ещё читается: показывать нечего, шапка
+                        // уже назвала файл, а выйти можно — «назад» держит
+                        // перехват уровня приложения (`FR-5` фичи 009).
+                        EditorDocument.Opening -> Unit
                     }
                 }
 
@@ -775,116 +729,7 @@ private fun ChromeDivider() {
     )
 }
 
-/**
- * Пустое состояние — решение `OQ-1`: чертёжный блок в языке дизайна с кнопкой
- * «Открыть папку»; макета у состояния нет, значения — из готовых токенов и
- * компонентов. Носители: папка не выбрана, папка недоступна, папка без
- * документов (`FR-1a` фичи 004) — различаются только текстами.
- *
- * @param label служебная метка блока прописными
- * @param message человеческий текст: подсказка или отказ (`FR-9`, `FR-3` фичи 004)
- */
-@Composable
-private fun EmptyState(label: String, message: String, onOpenFolder: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .navigationBarsPadding()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        AdocBlueprintBlock(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = label,
-                style = adocTextStyle(AdocTypography.sectionLabel),
-                color = AdocTheme.colors.textFaint,
-            )
-            Text(
-                text = message,
-                style = adocTextStyle(AdocTypography.body),
-                color = AdocTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 8.dp, bottom = 14.dp),
-            )
-            PrimaryButton(label = "ОТКРЫТЬ ПАПКУ", onClick = onOpenFolder)
-        }
-    }
-}
 
-/**
- * Список `.adoc`-документов открытой папки — вторая ступень сценария `OQ-1`
- * («папка, затем файл в ней»).
- *
- * Макета у списка нет; строки следуют описанию строки файла экрана «01»
- * в доступной здесь части: имя файла стилем строки списка, папка в шапке —
- * моноширинной служебной меткой. Пустая папка — состояние, не ошибка
- * (`FR-1a` фичи 004), с той же кнопкой смены папки.
- *
- * @param onOpenDocument выбор документа — открывает его в редакторе
- * @param onOpenFolder смена папки тем же системным диалогом
- */
-@Composable
-private fun FolderDocuments(
-    browsing: EditorDocument.Browsing,
-    onOpenDocument: (DocumentSource) -> Unit,
-    onOpenFolder: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Отказ открытия документа (FR-9): плашка в общем языке, касание убирает.
-        var noticeDismissed by remember(browsing.notice) { mutableStateOf(false) }
-        browsing.notice?.takeUnless { noticeDismissed }?.let { notice ->
-            NoticeBanner(text = notice, onDismiss = { noticeDismissed = true })
-        }
-
-        if (browsing.documents.isEmpty()) {
-            EmptyState(
-                label = "ДОКУМЕНТОВ НЕТ",
-                message = "В папке «${browsing.tree.displayName}» нет файлов .adoc. " +
-                    "Выберите другую папку или добавьте документы в эту.",
-                onOpenFolder = onOpenFolder,
-            )
-            return@Column
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "ПАПКА · ${browsing.tree.displayName}",
-                style = adocTextStyle(AdocTypography.sectionLabel),
-                color = AdocTheme.colors.textFaint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            SecondaryButton(label = "СМЕНИТЬ", onClick = onOpenFolder)
-        }
-        ChromeDivider()
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding(),
-        ) {
-            items(browsing.documents, key = { it.id }) { source ->
-                Text(
-                    text = source.displayName,
-                    style = adocTextStyle(AdocTypography.listItem),
-                    color = AdocTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(role = Role.Button) { onOpenDocument(source) }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                )
-                ChromeDivider()
-            }
-        }
-    }
-}
 
 /**
  * Плашка отказа записи — решение `OQ-3`: та же полоса, что у отказа рендера,
@@ -994,6 +839,30 @@ private fun PreviewPane(
 }
 
 /**
+ * Полоса-уведомление: человеческий текст и касание, чтобы убрать.
+ *
+ * Осталась после выноса списка в корень (`SL-2b` фичи 009) ради превью:
+ * переход по ссылке на другой документ сообщает результат этой же полосой.
+ */
+@Composable
+private fun NoticeBanner(text: String, onDismiss: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AdocTheme.colors.raised)
+            .clickable(onClick = onDismiss),
+    ) {
+        Text(
+            text = text,
+            style = adocTextStyle(AdocTypography.metadata),
+            color = AdocTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+        )
+        ChromeDivider()
+    }
+}
+
+/**
  * Плашка отказа рендера — решения `OQ-2` фичи 003 и `OQ-3` этой фичи: полоса
  * под панелями с человеческим текстом и кнопкой «Повторить»; техника — по
  * касанию текста. Последний удачный HTML под плашкой продолжает показываться.
@@ -1033,24 +902,6 @@ private fun PreviewFailureBanner(failure: PreviewFailure, onRetry: () -> Unit) {
     }
 }
 
-/** Однострочное уведомление в языке плашек; касание убирает его. */
-@Composable
-private fun NoticeBanner(text: String, onDismiss: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AdocTheme.colors.raised)
-            .clickable(onClick = onDismiss),
-    ) {
-        Text(
-            text = text,
-            style = adocTextStyle(AdocTypography.metadata),
-            color = AdocTheme.colors.textSecondary,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-        )
-        ChromeDivider()
-    }
-}
 
 /**
  * Спрятать компонент, не выводя его из композиции: он измеряется как обычно,

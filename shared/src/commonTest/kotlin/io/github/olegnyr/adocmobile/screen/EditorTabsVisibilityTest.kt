@@ -17,6 +17,10 @@ import kotlin.test.assertFalse
  * [undoShortcutFor]. Половина с *открытым* документом — в `EditorScreenModelTest`:
  * `EditorDocument.Open` строится настоящим holder-ом, а `sealed`-состояние
  * подделкой из другого модуля не изобразить.
+ *
+ * Состояний списка среди проверяемых больше нет: список файлов уехал в
+ * корневой экран приложения (`SL-2b` фичи 009), и «состояние без документа» у
+ * редактора теперь ровно одно.
  */
 class EditorTabsVisibilityTest {
 
@@ -25,18 +29,9 @@ class EditorTabsVisibilityTest {
 
     @Test
     fun TC_22_tabsHiddenWithoutOpenDocument() {
-        assertFalse(editorTabsVisible(EditorDocument.NoFolder), "папка не выбрана — переключать нечего")
         assertFalse(
-            editorTabsVisible(EditorDocument.FolderFailed("Папка недоступна")),
-            "папка недоступна — переключать нечего",
-        )
-        assertFalse(
-            editorTabsVisible(EditorDocument.Browsing(tree, listOf(source))),
-            "список документов папки — вкладки относятся к документу, а не к папке (FR-22)",
-        )
-        assertFalse(
-            editorTabsVisible(EditorDocument.Browsing(tree, emptyList())),
-            "папка без документов — та же пустота, тоже без вкладок",
+            editorTabsVisible(EditorDocument.Opening),
+            "документ ещё открывается — переключать нечего (FR-22)",
         )
     }
 
@@ -47,15 +42,7 @@ class EditorTabsVisibilityTest {
         // редактором, а не вкладкой, оставшейся от прежнего.
         assertEquals(
             EditorTab.Editor,
-            editorTabAfter(EditorDocument.Browsing(tree, listOf(source)), EditorTab.Preview),
-        )
-        assertEquals(
-            EditorTab.Editor,
-            editorTabAfter(EditorDocument.NoFolder, EditorTab.Preview),
-        )
-        assertEquals(
-            EditorTab.Editor,
-            editorTabAfter(EditorDocument.FolderFailed("Папка недоступна"), EditorTab.Preview),
+            editorTabAfter(EditorDocument.Opening, EditorTab.Preview),
         )
     }
 }

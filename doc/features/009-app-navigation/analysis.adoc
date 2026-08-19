@@ -698,7 +698,7 @@ xref:../../adr/adr-003-layout-1a.adoc[ADR-003 — раскладка 1a] (accept
 | FR-11 (признак переживает перезапуск) | UC-6, UC-7 | TC-10 | SL-3 | {st-todo}
 | FR-12 (переключение из меню) | UC-1, UC-7 | TC-7 | SL-3 | {st-todo}
 | FR-13 (Git-действия только у клона) | UC-1, UC-3 | TC-8 | SL-4 | {st-todo}
-| FR-14 (список один) | UC-1, UC-2 | TC-6, TC-8, TC-24 | SL-2, SL-2b, SL-4 | {st-wip}
+| FR-14 (список один) | UC-1, UC-2 | TC-6, TC-8, TC-24 | SL-2, SL-2b (список удалён из редактора), SL-4 | {st-wip}
 | FR-15 (отказ источника) | UC-7 | TC-9 | SL-3 | {st-todo}
 | FR-16 (сборка `JGitSync` + секреты) | UC-3 | TC-11 | SL-4 | {st-todo}
 | FR-17 (гейт «платформа без Git») | UC-1 | TC-12 | SL-4 | {st-todo}

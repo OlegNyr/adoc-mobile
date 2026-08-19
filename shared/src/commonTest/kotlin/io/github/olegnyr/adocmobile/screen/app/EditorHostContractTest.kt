@@ -67,7 +67,7 @@ class EditorHostContractTest {
         // не факт, что к концу теста случилось и то и другое (замечание ревью).
         var diskAtSignal: String? = null
         val model = model(onDocumentClosed = { diskAtSignal = access.written.lastOrNull()?.second })
-        model.start()
+        model.open(document)
         model.textEdited("= Заголовок\n\nПравка.")
 
         model.closeRequested()
@@ -86,7 +86,7 @@ class EditorHostContractTest {
         access.writeError = DocumentWriteError.WriteFailed
         val closed = mutableListOf<String?>()
         val model = model(onDocumentClosed = { notice -> closed += notice })
-        model.start()
+        model.open(document)
         model.textEdited("= Заголовок\n\nПравка.")
 
         model.closeRequested()
@@ -105,7 +105,7 @@ class EditorHostContractTest {
         access.contents[document.id] = "= Заголовок"
         val closed = mutableListOf<String?>()
         val model = model(onDocumentClosed = { notice -> closed += notice })
-        model.start()
+        model.open(document)
         assertIs<EditorDocument.Open>(model.document, "документ открыт до смены папки")
 
         model.folderChosen()
